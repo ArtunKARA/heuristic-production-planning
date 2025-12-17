@@ -1,0 +1,40 @@
+# Python caches
+__pycache__/
+*.py[cod]
+*.pyd
+*.pyo
+
+# Virtual envs
+.venv/
+venv/
+env/
+ENV/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Local data outputs (generated)
+data/*.json
+
+# Keep test fixtures
+!tests/data/
+!tests/data/*.json
+
+# Node
+node_modules/
+
+# Local libs (installed dependencies)
+lib/
+Lib/

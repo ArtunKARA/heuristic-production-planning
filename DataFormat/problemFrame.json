@@ -1,0 +1,193 @@
+{
+  "problemData": {
+    "problem_meta": {
+      "problem_code": "PLAN_01",
+      "horizon_type": "Week",
+      "base_shift_templates_code": "S3"
+    },
+    "time_buckets": [
+      {
+        "id": "CW43_25",
+        "index": 0,
+        "start_date": "2025-11-24",
+        "end_date": "2025-11-30"
+      }
+    ],
+    "orders": [
+      {
+        "product_code": "P1",
+        "orders": [
+          {
+            "week": "CW43_25",
+            "qty": 30000
+          }
+        ]
+      }
+    ],
+    "stocks": [
+      {
+        "product_code": "P1",
+        "warehouse": "sevk",
+        "qty": 5000
+      }
+    ],
+    "products": [
+      {
+        "code": "P1",
+        "name": "Ürün P1",
+        "base_unit": "ADET",
+        "weight_per_unit_kg": 7.12,
+        "process_data": [
+          {
+            "process_code": "AP100",
+            "step_no": 10,
+            "name": "Karışım Hazırlama",
+            "output_material": "CMP_P1",
+            "yield_factor": 0.97,
+            "base_qty": 73.987,
+            "base_qty_type": "ADET",
+            "setup_time_min": 35,
+            "cycle_time_sec": 2333,
+            "wait_time": 1,
+            "wait_unit": "GUN",
+            "process_input": [
+              {
+                "material_code": "BH114",
+                "qty_per_output_unit": 25,
+                "qty_unit": "ADET",
+                "scrap_factor": 0.01
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "processes": [
+      {
+        "code": "AP100",
+        "name": "Karışım Hazırlama",
+        "constraints": []
+      },
+      {
+        "code": "AP300",
+        "name": "Vulkanizasyon",
+        "constraints": ["machine", "mold"]
+      }
+    ],
+    "resources": {
+      "machine": [
+        {
+          "id": 12,
+          "name": "Pres 1",
+          "process_code": "AP300"
+        }
+      ],
+      "mold": [
+        {
+          "id": 3,
+          "code": "KLP_P1_01",
+          "name": "P1 Kalıp 1",
+          "process_code": "AP300",
+          "eye": 12,
+          "compatible_machines_id": [12, 3],
+          "supported_products_id": [1, 23]
+        }
+      ]
+    },
+    "shift_templates": [
+      {
+        "code": "S3",
+        "name": "3lü Vardiya",
+        "segments": [
+          {
+            "code": "NIGHT",
+            "start": "00:00",
+            "end": "08:00",
+            "constraints": ["NO_MOLD_CHANGE_AT_NIGHT"]
+          }
+        ]
+      }
+    ],
+    "work_calendar": [
+      {
+        "date": "2025-10-13",
+        "shift_templates_code": "S3",
+        "holiday": false
+      }
+    ],
+    "compatibility": {
+      "machine_mold_pairs": [
+        {
+          "machine_id": "M01",
+          "mold_code": "KLP_P1_02",
+          "process_code": "AP300"
+        }
+      ],
+      "product_molds": [
+        {
+          "product_code": "P1",
+          "process_code": "AP300",
+          "allowed_molds": ["KLP_P1_01", "KLP_P1_02"]
+        }
+      ]
+    }
+  },
+
+  "scenarioConfig": {
+    "meta": {
+      "name": "Base_Scenario"
+    },
+    "constraints": {
+      "DEMAND_SATISFACTION_PER_WEEK": {
+        "shift_based": false,
+        "type": "hard",
+        "weight": null
+      },
+      "NO_MOLD_CHANGE_AT_NIGHT": {
+        "shift_based": true,
+        "type": "hard",
+        "weight": null
+      },
+      "SHIFT_TEMPLATES": {
+        "shift_based": false,
+        "type": "soft",
+        "weight": 10.0
+      }
+    }
+  },
+
+  "state": {
+    "meta": {
+      "iteration": 12,
+      "order_fulfillment_rate": 95,
+      "makespan": 95
+    },
+    "plan": [
+      {
+        "lot_id": "L1",
+        "product_code": "P1",
+        "process_code": "AP300",
+        "week": "CW43_25",
+        "qty": 4800,
+        "qty_type": "ADET",
+        "setup_start_time": "2023-10-10T12:12:00",
+        "setup_end_time": "2023-10-10T12:45:00",
+        "process_start_time": "2023-10-10T12:45:00",
+        "process_end_time": "2023-10-10T20:48:00",
+        "resources": [
+          { "type": "machine", "id": 12 }
+        ]
+      }
+    ],
+    "lots": [
+      {
+        "product_code": "P1",
+        "time_bucket_id": "CW43_25",
+        "opening_stock": 7000,
+        "production_qty": 28000,
+        "demand": 30000,
+        "closing_stock": 5000
+      }
+    ]
+  }
+}
