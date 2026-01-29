@@ -6,33 +6,17 @@
       "base_shift_templates_code": "S3"
     },
     "time_buckets": [
-      {
-        "id": "CW43_25",
-        "index": 0,
-        "start_date": "2025-11-24",
-        "end_date": "2025-11-30"
-      }
+      { "id": "CW43_25", "index": 0, "start_date": "2025-11-24", "end_date": "2025-11-30" }
     ],
     "orders": [
       {
         "product_code": "P1",
         "orders": [
-          {
-            "order_id": "O1",
-            "time_bucket_id": "CW43_25",
-            "due_date": "2025-11-30T23:59:59",
-            "qty": 30000
-          }
+          { "order_id": "O1", "time_bucket_id": "CW43_25", "due_date": "2025-11-30T23:59:59", "qty": 30000 }
         ]
       }
     ],
-    "stocks": [
-      {
-        "product_code": "P1",
-        "warehouse": "sevk",
-        "qty": 5000
-      }
-    ],
+    "stocks": [{ "product_code": "P1", "warehouse": "sevk", "qty": 5000 }],
     "materials": [
       { "code": "BH114", "name": "Hammadde BH114", "base_unit": "ADET" },
       { "code": "CMP_P1", "name": "Karışım CMP_P1", "base_unit": "ADET" }
@@ -57,12 +41,7 @@
             "wait_time": 1,
             "wait_unit": "GUN",
             "inputs": [
-              {
-                "material_code": "BH114",
-                "qty_per_output_unit": 25,
-                "qty_unit": "ADET",
-                "scrap_factor": 0.01
-              }
+              { "material_code": "BH114", "qty_per_output_unit": 25, "qty_unit": "ADET", "scrap_factor": 0.01 }
             ]
           },
           {
@@ -85,12 +64,7 @@
     ],
     "resources": {
       "machines": [
-        {
-          "id": 12,
-          "name": "Pres 1",
-          "process_code": "AP300",
-          "capacity_by_bucket": { "CW43_25": 168 }
-        }
+        { "id": 12, "name": "Pres 1", "process_code": "AP300", "capacity_by_bucket": { "CW43_25": 168 } }
       ],
       "molds": [
         {
@@ -137,17 +111,16 @@
         { "machine_id": 12, "mold_code": "KLP_P1_02", "process_code": "AP300" }
       ],
       "product_molds": [
-        {
-          "product_code": "P1",
-          "process_code": "AP300",
-          "allowed_molds": ["KLP_P1_01", "KLP_P1_02"]
-        }
+        { "product_code": "P1", "process_code": "AP300", "allowed_molds": ["KLP_P1_01", "KLP_P1_02"] }
       ]
     }
   },
-
   "scenarioConfig": {
     "meta": { "name": "Base_Scenario" },
+    "constraints": [
+      { "code": "DEMAND_SATISFACTION_PER_WEEK", "type": "hard", "shift_based": false },
+      { "code": "NO_MOLD_CHANGE_AT_NIGHT", "type": "soft", "shift_based": true, "weight": 100.0 }
+    ],
     "weights": {
       "w_mold_change": 10.0,
       "w_night_mold_change": 100.0,
@@ -169,13 +142,8 @@
       "SOFT_MACHINE_COUNT_LOW": true
     }
   },
-
   "state": {
-    "meta": {
-      "iteration": 12,
-      "order_fulfillment_rate": 95,
-      "makespan": 95
-    },
+    "meta": { "iteration": 12, "order_fulfillment_rate": 95, "makespan": 95 },
     "lots": [
       {
         "lot_id": "L1",
@@ -188,10 +156,17 @@
         "setup_end_time": "2025-11-25T12:45:00",
         "process_start_time": "2025-11-25T12:45:00",
         "process_end_time": "2025-11-25T20:48:00",
-        "assigned_resources": {
-          "machine": 12,
-          "mold": "KLP_P1_01"
-        }
+        "assigned_resources": { "machine": 12, "mold": "KLP_P1_01" }
+      },
+      {
+        "lot_id": "L2",
+        "product_code": "P1",
+        "process_code": "AP300",
+        "time_bucket_id": "CW43_25",
+        "qty": 4800,
+        "process_start_time": "2025-11-25T21:00:00",
+        "process_end_time": "2025-11-26T05:30:00",
+        "assigned_resources": { "machine": 12, "mold": "KLP_P1_02" }
       }
     ]
   }

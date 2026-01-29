@@ -1,5 +1,5 @@
 {
-  "problemData": {
+  "problem": {
     "problem_meta": {
       "problem_code": "PLAN_01",
       "horizon_type": "Week",
@@ -18,7 +18,9 @@
         "product_code": "P1",
         "orders": [
           {
-            "week": "CW43_25",
+            "order_id": "O1",
+            "time_bucket_id": "CW43_25",
+            "due_date": "2025-11-30T23:59:59",
             "qty": 30000
           }
         ]
@@ -30,6 +32,10 @@
         "warehouse": "sevk",
         "qty": 5000
       }
+    ],
+    "materials": [
+      { "code": "BH114", "name": "Hammadde BH114", "base_unit": "ADET" },
+      { "code": "CMP_P1", "name": "Karışım CMP_P1", "base_unit": "ADET" }
     ],
     "products": [
       {
@@ -50,7 +56,7 @@
             "cycle_time_sec": 2333,
             "wait_time": 1,
             "wait_unit": "GUN",
-            "process_input": [
+            "inputs": [
               {
                 "material_code": "BH114",
                 "qty_per_output_unit": 25,
@@ -58,6 +64,17 @@
                 "scrap_factor": 0.01
               }
             ]
+          },
+          {
+            "process_code": "AP300",
+            "step_no": 20,
+            "name": "Vulkanizasyon",
+            "yield_factor": 0.995,
+            "base_qty": 12,
+            "base_qty_type": "ADET",
+            "setup_time_min": 20,
+            "cycle_time_sec": 60,
+            "inputs": []
           }
         ]
       }
@@ -75,22 +92,32 @@
       }
     ],
     "resources": {
-      "machine": [
+      "machines": [
         {
           "id": 12,
           "name": "Pres 1",
-          "process_code": "AP300"
+          "process_code": "AP300",
+          "capacity_by_bucket": {
+            "CW43_25": 168
+          }
         }
       ],
-      "mold": [
+      "molds": [
         {
-          "id": 3,
           "code": "KLP_P1_01",
           "name": "P1 Kalıp 1",
           "process_code": "AP300",
           "eye": 12,
-          "compatible_machines_id": [12, 3],
-          "supported_products_id": [1, 23]
+          "compatible_machines_id": [12],
+          "supported_products_id": ["P1"]
+        },
+        {
+          "code": "KLP_P1_02",
+          "name": "P1 Kalıp 2",
+          "process_code": "AP300",
+          "eye": 12,
+          "compatible_machines_id": [12],
+          "supported_products_id": ["P1"]
         }
       ]
     },
@@ -104,24 +131,35 @@
             "start": "00:00",
             "end": "08:00",
             "constraints": ["NO_MOLD_CHANGE_AT_NIGHT"]
+          },
+          {
+            "code": "DAY",
+            "start": "08:00",
+            "end": "16:00",
+            "constraints": []
+          },
+          {
+            "code": "EVENING",
+            "start": "16:00",
+            "end": "00:00",
+            "constraints": []
           }
         ]
       }
     ],
     "work_calendar": [
-      {
-        "date": "2025-10-13",
-        "shift_templates_code": "S3",
-        "holiday": false
-      }
+      { "date": "2025-11-24", "shift_templates_code": "S3", "holiday": false },
+      { "date": "2025-11-25", "shift_templates_code": "S3", "holiday": false },
+      { "date": "2025-11-26", "shift_templates_code": "S3", "holiday": false },
+      { "date": "2025-11-27", "shift_templates_code": "S3", "holiday": false },
+      { "date": "2025-11-28", "shift_templates_code": "S3", "holiday": false },
+      { "date": "2025-11-29", "shift_templates_code": "S3", "holiday": false },
+      { "date": "2025-11-30", "shift_templates_code": "S3", "holiday": false }
     ],
     "compatibility": {
       "machine_mold_pairs": [
-        {
-          "machine_id": "M01",
-          "mold_code": "KLP_P1_02",
-          "process_code": "AP300"
-        }
+        { "machine_id": 12, "mold_code": "KLP_P1_01", "process_code": "AP300" },
+        { "machine_id": 12, "mold_code": "KLP_P1_02", "process_code": "AP300" }
       ],
       "product_molds": [
         {
@@ -133,26 +171,27 @@
     }
   },
 
-  "scenarioConfig": {
-    "meta": {
-      "name": "Base_Scenario"
+  "scenario": {
+    "weights": {
+      "w_mold_change": 10.0,
+      "w_night_mold_change": 100.0,
+      "w_inventory": 1.0,
+      "w_machine_count": 5.0
     },
-    "constraints": {
-      "DEMAND_SATISFACTION_PER_WEEK": {
-        "shift_based": false,
-        "type": "hard",
-        "weight": null
-      },
-      "NO_MOLD_CHANGE_AT_NIGHT": {
-        "shift_based": true,
-        "type": "hard",
-        "weight": null
-      },
-      "SHIFT_TEMPLATES": {
-        "shift_based": false,
-        "type": "soft",
-        "weight": 10.0
-      }
+    "toggles": {
+      "HARD_DUE_DATE_FULFILLMENT": true,
+      "HARD_RESOURCE_ROLE_ASSIGNED": true,
+      "HARD_TIME_BUCKET_VALID": true,
+      "HARD_NO_HOLIDAY_WORK": true,
+      "HARD_COMPAT_MACHINE_MOLD_PROCESS": true,
+      "HARD_COMPAT_PRODUCT_MOLD": true,
+      "HARD_CAPACITY_BUCKET": true,
+      "HARD_CAPACITY_SEGMENT": true,
+
+      "SOFT_MOLD_CHANGE_MINIMIZE": true,
+      "SOFT_NIGHT_MOLD_CHANGE": true,
+      "SOFT_INVENTORY_LOW": true,
+      "SOFT_MACHINE_COUNT_LOW": true
     }
   },
 
@@ -162,31 +201,22 @@
       "order_fulfillment_rate": 95,
       "makespan": 95
     },
-    "plan": [
+    "lots": [
       {
         "lot_id": "L1",
         "product_code": "P1",
         "process_code": "AP300",
-        "week": "CW43_25",
+        "time_bucket_id": "CW43_25",
         "qty": 4800,
         "qty_type": "ADET",
-        "setup_start_time": "2023-10-10T12:12:00",
-        "setup_end_time": "2023-10-10T12:45:00",
-        "process_start_time": "2023-10-10T12:45:00",
-        "process_end_time": "2023-10-10T20:48:00",
-        "resources": [
-          { "type": "machine", "id": 12 }
-        ]
-      }
-    ],
-    "lots": [
-      {
-        "product_code": "P1",
-        "time_bucket_id": "CW43_25",
-        "opening_stock": 7000,
-        "production_qty": 28000,
-        "demand": 30000,
-        "closing_stock": 5000
+        "setup_start_time": "2025-11-25T12:12:00",
+        "setup_end_time": "2025-11-25T12:45:00",
+        "process_start_time": "2025-11-25T12:45:00",
+        "process_end_time": "2025-11-25T20:48:00",
+        "assigned_resources": {
+          "machine": 12,
+          "mold": "KLP_P1_01"
+        }
       }
     ]
   }

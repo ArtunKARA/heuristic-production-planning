@@ -20,6 +20,7 @@ from app.frame.ingest.problem_adapter import load_problem_frame
 from app.main import app
 from app.frame.repositories.problem_repo import ProblemRepository
 from app.evaluation.problem_validator import validate_references
+from app.evaluation.evaluate_state import evaluate_state
 
 
 DATA_DIR = Path(__file__).parent / "data"
@@ -75,8 +76,9 @@ def scenario_api_evaluate() -> None:
     resp2 = client.post(f"/frame/{pid}/evaluate")
     if resp2.status_code != 200:
         raise AssertionError(f"POST /frame/{{id}}/evaluate failed: {resp2.text}")
-    if "kpis" not in resp2.json():
-        raise AssertionError(f"Expected KPI payload, got: {resp2.text}")
+    body = resp2.json()
+    if "constraint_results" not in body or "kpi_results" not in body:
+        raise AssertionError(f"Expected evaluation payload, got: {resp2.text}")
 
 
 def _get_frame_id() -> str:
@@ -122,7 +124,7 @@ def scenario_invalid_time_bucket_in_orders() -> None:
     # EN: Tests validation error for an invalid week/time_bucket in orders.
     payload = load_json(DATA_DIR / "problemFrame.json")
     payload = deep_copy(payload)
-    payload["problemData"]["orders"][0]["orders"][0]["week"] = "CW00_00"
+    payload["problemData"]["orders"][0]["orders"][0]["time_bucket_id"] = "CW00_00"
     frame = load_problem_frame(payload)
     errors = validate_references(frame)
     if not any("orders reference unknown time bucket CW00_00" in err for err in errors):
@@ -134,7 +136,7 @@ def scenario_invalid_time_bucket_in_plan() -> None:
     # EN: Tests validation error for an invalid week/time_bucket in plan.
     payload = load_json(DATA_DIR / "problemFrame.json")
     payload = deep_copy(payload)
-    payload["state"]["plan"][0]["week"] = "CW00_00"
+    payload["state"]["lots"][0]["time_bucket_id"] = "CW00_00"
     frame = load_problem_frame(payload)
     errors = validate_references(frame)
     if not any("plan L1 references unknown time bucket CW00_00" in err for err in errors):
@@ -146,7 +148,7 @@ def scenario_incompatible_machine_mold() -> None:
     # EN: Tests incompatible machine/mold combination handling.
     payload = load_json(DATA_DIR / "problemFrame.json")
     payload = deep_copy(payload)
-    payload["state"]["plan"][0]["resources"].append({"type": "mold", "id": "KLP_P1_02"})
+    payload["state"]["lots"][0]["assigned_resources"]["mold"] = "KLP_P1_02"
     frame = load_problem_frame(payload)
     errors = validate_references(frame)
     if not any("incompatible machine/mold/process" in err for err in errors):
@@ -165,6 +167,18 @@ def scenario_constraints_dict_normalization() -> None:
     frame = load_problem_frame(payload)
     if not frame.scenarioConfig.constraints:
         raise AssertionError("Expected constraints list after normalization")
+
+
+def scenario_evaluate_state_runs() -> None:
+    payload = load_json(DATA_DIR / "problemFrame.json")
+    frame = load_problem_frame(payload)
+    res = evaluate_state(
+        state=frame.state.model_dump(mode="json", by_alias=True),
+        problemData=frame.problemData.model_dump(mode="json", by_alias=True),
+        scenarioConfig=frame.scenarioConfig.model_dump(mode="json", by_alias=True),
+    )
+    if "feasible" not in res:
+        raise AssertionError("evaluate_state missing feasible flag")
 
 
 def scenario_repository_save_load() -> None:
@@ -195,6 +209,7 @@ if __name__ == "__main__":
         ("incompatible_machine_mold", scenario_incompatible_machine_mold),
         ("constraints_dict_normalization", scenario_constraints_dict_normalization),
         ("repository_save_load", scenario_repository_save_load),
+        ("evaluate_state_runs", scenario_evaluate_state_runs),
     ]
     for name, fn in scenarios:
         fn()

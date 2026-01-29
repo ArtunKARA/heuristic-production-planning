@@ -8,6 +8,7 @@ from typing import Any, Dict, Union
 
 from pydantic import ValidationError
 
+from app.frame.ingest.normalizer import normalize_problem_frame
 from app.frame.models.problem import ProblemFrame
 
 
@@ -44,23 +45,12 @@ def load_problem_frame(data_or_path: Union[str, Path, Dict[str, Any]]) -> Proble
     else:
         raise ValueError("Unsupported input type for problem frame loader.")
 
-    raw["scenarioConfig"] = _normalize_constraints(raw.get("scenarioConfig", {}))
-    state = raw.get("state", {})
-    if isinstance(state, dict):
-        lots = state.get("lots")
-        plan = state.get("plan")
-        if isinstance(lots, list) and lots:
-            sample = lots[0]
-            # Heuristic: inventory rows have opening_stock/closing_stock fields.
-            if isinstance(sample, dict) and "opening_stock" in sample:
-                state.setdefault("inventory", lots)
-                if isinstance(plan, list):
-                    state["lots"] = plan
-        if "lots" not in state and isinstance(plan, list):
-            state["lots"] = plan
-        raw["state"] = state
+    raw["scenarioConfig"] = _normalize_constraints(raw.get("scenarioConfig", raw.get("scenario", {})))
+
+    # Canonical normalization for evaluator compatibility
+    normalized = normalize_problem_frame(raw)
 
     try:
-        return ProblemFrame.model_validate(raw)
+        return ProblemFrame.model_validate(normalized)
     except ValidationError as exc:
         raise ValueError(str(exc)) from exc

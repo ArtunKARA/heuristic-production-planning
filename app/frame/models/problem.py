@@ -5,7 +5,8 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
+from app.frame.ingest.normalizer import weight_key_for_code, code_mapping
 
 
 class ProblemMeta(BaseModel):
@@ -22,8 +23,11 @@ class TimeBucket(BaseModel):
 
 
 class OrderItem(BaseModel):
-    week: str
+    order_id: Optional[str] = None
+    time_bucket_id: Optional[str] = Field(default=None, validation_alias=AliasChoices("time_bucket_id", "week"))
+    due_date: Optional[datetime] = None
     qty: float
+    qty_type: Optional[str] = None
 
 
 class OrderGroup(BaseModel):
@@ -93,7 +97,8 @@ class Machine(BaseModel):
     name: str
     process_code: str
     shifts: Optional[List[str]] = None
-    weekly_capacity: Optional[Dict[str, float]] = None
+    capacity_by_bucket: Dict[str, float] = Field(default_factory=dict, validation_alias=AliasChoices("capacity_by_bucket", "weekly_capacity"))
+    shift_templates_code: Optional[str] = None
 
 
 class Mold(BaseModel):
@@ -104,13 +109,30 @@ class Mold(BaseModel):
     eye: Optional[int] = None
     supported_products: Optional[List[str]] = None
     supported_products_id: Optional[List[int]] = None
-    compatible_machines: Optional[List[str]] = None
+    compatible_machines: Optional[List[int]] = None
     compatible_machines_id: Optional[List[int]] = None
+
+    @model_validator(mode="before")
+    def ensure_code(cls, values: Dict[str, Any]) -> Dict[str, Any]:
+        if values is None:
+            return values
+        if not values.get("code") and values.get("id") is not None:
+            values["code"] = str(values["id"])
+        return values
 
 
 class Resources(BaseModel):
-    machine: List[Machine] = Field(default_factory=list)
-    mold: List[Mold] = Field(default_factory=list)
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    machines: List[Machine] = Field(default_factory=list, validation_alias=AliasChoices("machines", "machine"))
+    molds: List[Mold] = Field(default_factory=list, validation_alias=AliasChoices("molds", "mold"))
+
+    @model_validator(mode="before")
+    def fold_legacy_keys(cls, values: Dict[str, Any]) -> Dict[str, Any]:
+        if values is None:
+            return values
+        # keep any additional resource groups as-is (extra="allow")
+        return values
 
 
 class MachineMoldPair(BaseModel):
@@ -184,6 +206,31 @@ class ScenarioConstraint(BaseModel):
 class ScenarioConfig(BaseModel):
     meta: ScenarioMeta
     constraints: List[ScenarioConstraint] = Field(default_factory=list)
+    weights: Dict[str, float] = Field(default_factory=dict)
+    toggles: Dict[str, bool] = Field(default_factory=dict)
+
+    @model_validator(mode="before")
+    def fill_from_constraints(cls, values: Dict[str, Any]) -> Dict[str, Any]:
+        if values is None:
+            return values
+        constraints = values.get("constraints", []) or []
+        toggles = values.get("toggles", {}) or {}
+        weights = values.get("weights", {}) or {}
+        for c in constraints:
+            code = c.get("code")
+            if not code:
+                continue
+            mapped = code_mapping().get(code, code)
+            if c.get("type") == "hard":
+                toggles.setdefault(mapped, c.get("active", True))
+            else:
+                toggles.setdefault(mapped, c.get("active", True))
+                if c.get("weight") is not None:
+                    wk = weight_key_for_code(mapped) or f"w_{mapped.lower()}"
+                    weights.setdefault(wk, c.get("weight"))
+        values["toggles"] = toggles
+        values["weights"] = weights
+        return values
 
 
 class PlanResource(BaseModel):
@@ -192,10 +239,12 @@ class PlanResource(BaseModel):
 
 
 class PlanItem(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, validate_by_name=True, validate_by_alias=True)
+
     lot_id: Optional[str] = None
     product_code: str
     process_code: str
-    week: Optional[str] = None
+    time_bucket_id: Optional[str] = Field(default=None, validation_alias=AliasChoices("time_bucket_id", "week"))
     qty: float
     qty_type: Optional[str] = None
     setup_start_time: Optional[datetime] = None
@@ -203,6 +252,23 @@ class PlanItem(BaseModel):
     process_start_time: Optional[datetime] = None
     process_end_time: Optional[datetime] = None
     resources: List[PlanResource] = Field(default_factory=list)
+    assigned_resources: Dict[str, str | int] = Field(default_factory=dict)
+    segment_code: Optional[str] = None
+
+    @model_validator(mode="after")
+    def normalize(self) -> "PlanItem":
+        if not self.assigned_resources and self.resources:
+            assigned: Dict[str, str | int] = {}
+            for res in self.resources:
+                assigned[res.type] = res.id
+            self.assigned_resources = assigned
+
+        # normalize machine id to int when numeric
+        if self.assigned_resources.get("machine") is not None:
+            m = self.assigned_resources["machine"]
+            if isinstance(m, str) and m.isdigit():
+                self.assigned_resources["machine"] = int(m)
+        return self
 
 
 class LotInventory(BaseModel):
@@ -225,14 +291,31 @@ class State(BaseModel):
     model_config = ConfigDict(populate_by_name=True, validate_by_name=True, validate_by_alias=True)
 
     meta: Optional[StateMeta] = None
-    lots: List[PlanItem] = Field(default_factory=list)
-    inventory: List[LotInventory] = Field(default_factory=list)
-    plan: List[PlanItem] = Field(default_factory=list)
+    lots: List[PlanItem] = Field(default_factory=list, validation_alias=AliasChoices("lots", "plan"))
+    inventory_summary: List[LotInventory] = Field(default_factory=list, validation_alias=AliasChoices("inventory_summary", "inventory"))
+
+    @model_validator(mode="before")
+    def split_inventory_and_plan(cls, values: Dict[str, Any]) -> Dict[str, Any]:
+        if values is None:
+            return values
+
+        lots_val = values.get("lots") or values.get("plan") or []
+        if isinstance(lots_val, list) and lots_val:
+            sample = lots_val[0]
+            if isinstance(sample, dict) and "opening_stock" in sample:
+                # treat provided lots as inventory summary
+                values["inventory_summary"] = lots_val
+                values["lots"] = values.get("plan") or []
+            else:
+                values["lots"] = lots_val
+
+        if "inventory_summary" not in values and "inventory" in values:
+            values["inventory_summary"] = values["inventory"]
+
+        return values
 
     @model_validator(mode="after")
     def normalize_plan(self) -> "State":
-        if not self.lots and self.plan:
-            self.lots = self.plan
         return self
 
 
