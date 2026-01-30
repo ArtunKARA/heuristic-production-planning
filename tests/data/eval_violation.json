@@ -1,0 +1,170 @@
+{
+  "problemData": {
+    "problem_meta": { "problem_code": "VIOLATION_CASE", "horizon_type": "Week", "base_shift_templates_code": "S3" },
+    "time_buckets": [
+      { "id": "TB1", "index": 0, "start_date": "2025-11-24", "end_date": "2025-11-30" }
+    ],
+    "orders": [
+      { "product_code": "P1", "orders": [ { "order_id": "O1", "time_bucket_id": "TB1", "due_date": "2025-11-30T23:59:59", "qty": 500 } ] }
+    ],
+    "stocks": [],
+    "products": [
+      {
+        "code": "P1",
+        "name": "Product 1",
+        "base_unit": "EA",
+        "process_data": [
+          {
+            "process_code": "AP300",
+            "step_no": 10,
+            "name": "Press",
+            "yield_factor": 1.0,
+            "base_qty": 1,
+            "base_qty_type": "EA",
+            "setup_time_min": 0,
+            "cycle_time_sec": 3600,
+            "inputs": []
+          }
+        ]
+      }
+    ],
+    "processes": [
+      { "code": "AP300", "name": "Press", "constraints": ["machine", "mold"] }
+    ],
+    "resources": {
+      "machines": [
+        { "id": 1, "name": "MCH-1", "process_code": "AP300", "capacity_by_bucket": { "TB1": 4 } },
+        { "id": 2, "name": "MCH-2", "process_code": "AP300", "capacity_by_bucket": { "TB1": 4 } }
+      ],
+      "molds": [
+        { "code": "M1", "name": "Mold1", "process_code": "AP300", "eye": 1, "compatible_machines_id": [1], "supported_products_id": ["P1"] },
+        { "code": "M2", "name": "Mold2", "process_code": "AP300", "eye": 1, "compatible_machines_id": [1,2], "supported_products_id": ["P1"] },
+        { "code": "M_BAD", "name": "MoldBad", "process_code": "AP300", "eye": 1, "compatible_machines_id": [2], "supported_products_id": ["P1"] }
+      ]
+    },
+    "shift_templates": [
+      {
+        "code": "S3",
+        "name": "3 Shift",
+        "segments": [
+          { "code": "NIGHT", "start": "00:00", "end": "08:00", "constraints": ["NO_MOLD_CHANGE_AT_NIGHT"] },
+          { "code": "MORNING", "start": "08:00", "end": "16:00", "constraints": [] },
+          { "code": "EVENING", "start": "16:00", "end": "00:00", "constraints": [] }
+        ]
+      }
+    ],
+    "work_calendar": [
+      { "date": "2025-11-24", "shift_templates_code": "S3", "holiday": false },
+      { "date": "2025-11-25", "shift_templates_code": "S3", "holiday": false },
+      { "date": "2025-11-26", "shift_templates_code": "S3", "holiday": true },
+      { "date": "2025-11-27", "shift_templates_code": "S3", "holiday": false }
+    ],
+    "compatibility": {
+      "machine_mold_pairs": [
+        { "machine_id": 1, "mold_code": "M1", "process_code": "AP300" },
+        { "machine_id": 1, "mold_code": "M2", "process_code": "AP300" }
+      ],
+      "product_molds": [
+        { "product_code": "P1", "process_code": "AP300", "allowed_molds": ["M1", "M2"] }
+      ]
+    }
+  },
+  "scenarioConfig": {
+    "meta": { "name": "ViolationScenario" },
+    "weights": {
+      "w_mold_change": 10.0,
+      "w_night_mold_change": 100.0,
+      "w_inventory": 1.0,
+      "w_machine_count": 5.0
+    },
+    "toggles": {
+      "HARD_DUE_DATE_FULFILLMENT": true,
+      "HARD_RESOURCE_ROLE_ASSIGNED": true,
+      "HARD_TIME_BUCKET_VALID": true,
+      "HARD_NO_HOLIDAY_WORK": true,
+      "HARD_COMPAT_MACHINE_MOLD_PROCESS": true,
+      "HARD_COMPAT_PRODUCT_MOLD": true,
+      "HARD_CAPACITY_BUCKET": true,
+      "HARD_CAPACITY_SEGMENT": true,
+      "SOFT_MOLD_CHANGE_MINIMIZE": true,
+      "SOFT_NIGHT_MOLD_CHANGE": true,
+      "SOFT_INVENTORY_LOW": true,
+      "SOFT_MACHINE_COUNT_LOW": true
+    }
+  },
+  "state": {
+    "meta": { "iteration": 1 },
+    "lots": [
+      {
+        "lot_id": "L_OUTSIDE_BUCKET",
+        "product_code": "P1",
+        "process_code": "AP300",
+        "time_bucket_id": "BAD_BUCKET",
+        "qty": 1,
+        "process_start_time": "2025-12-05T01:00:00",
+        "process_end_time": "2025-12-05T02:00:00",
+        "assigned_resources": { "machine": 1, "mold": "M1" }
+      },
+      {
+        "lot_id": "L_MISSING_MOLD",
+        "product_code": "P1",
+        "process_code": "AP300",
+        "time_bucket_id": "TB1",
+        "qty": 1,
+        "process_start_time": "2025-11-24T01:00:00",
+        "process_end_time": "2025-11-24T02:00:00",
+        "assigned_resources": { "machine": 1 }
+      },
+      {
+        "lot_id": "L_NIGHT1",
+        "product_code": "P1",
+        "process_code": "AP300",
+        "time_bucket_id": "TB1",
+        "qty": 1,
+        "process_start_time": "2025-11-24T00:30:00",
+        "process_end_time": "2025-11-24T01:30:00",
+        "assigned_resources": { "machine": 1, "mold": "M1" }
+      },
+      {
+        "lot_id": "L_NIGHT2",
+        "product_code": "P1",
+        "process_code": "AP300",
+        "time_bucket_id": "TB1",
+        "qty": 1,
+        "process_start_time": "2025-11-24T01:40:00",
+        "process_end_time": "2025-11-24T02:40:00",
+        "assigned_resources": { "machine": 1, "mold": "M2" }
+      },
+      {
+        "lot_id": "L_CAPACITY",
+        "product_code": "P1",
+        "process_code": "AP300",
+        "time_bucket_id": "TB1",
+        "qty": 10,
+        "process_start_time": "2025-11-24T02:50:00",
+        "process_end_time": "2025-11-24T12:50:00",
+        "assigned_resources": { "machine": 1, "mold": "M1" }
+      },
+      {
+        "lot_id": "L_HOLIDAY",
+        "product_code": "P1",
+        "process_code": "AP300",
+        "time_bucket_id": "TB1",
+        "qty": 1,
+        "process_start_time": "2025-11-26T01:00:00",
+        "process_end_time": "2025-11-26T02:00:00",
+        "assigned_resources": { "machine": 1, "mold": "M1" }
+      },
+      {
+        "lot_id": "L_COMPAT_BAD",
+        "product_code": "P1",
+        "process_code": "AP300",
+        "time_bucket_id": "TB1",
+        "qty": 1,
+        "process_start_time": "2025-11-24T04:00:00",
+        "process_end_time": "2025-11-24T05:00:00",
+        "assigned_resources": { "machine": 2, "mold": "M_BAD" }
+      }
+    ]
+  }
+}

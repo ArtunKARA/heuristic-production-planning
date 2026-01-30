@@ -69,6 +69,7 @@
             "process_code": "AP300",
             "step_no": 20,
             "name": "Vulkanizasyon",
+            "output_material": "P1",
             "yield_factor": 0.995,
             "base_qty": 12,
             "base_qty_type": "ADET",

@@ -1,0 +1,80 @@
+{
+  "info": {
+    "name": "Heuristic Production Planning API",
+    "_postman_id": "9b2f2c3a-1234-4abc-9def-111122223333",
+    "description": "Frame create/validate/evaluate/optimize flows",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://127.0.0.1:8000" },
+    { "key": "frame_id", "value": "" },
+    { "key": "frame_payload", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "request": { "method": "GET", "url": "{{base_url}}/health" }
+    },
+    {
+      "name": "Create Frame",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{{frame_payload}}" },
+        "url": "{{base_url}}/frame"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', function(){ pm.response.to.have.status(200); });",
+              "var id = pm.response.json().id; pm.collectionVariables.set('frame_id', id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Get Frame",
+      "request": { "method": "GET", "url": "{{base_url}}/frame/{{frame_id}}" }
+    },
+    {
+      "name": "Validate Frame",
+      "request": { "method": "POST", "url": "{{base_url}}/frame/{{frame_id}}/validate" }
+    },
+    {
+      "name": "Evaluate Frame",
+      "request": { "method": "POST", "url": "{{base_url}}/frame/{{frame_id}}/evaluate" }
+    },
+    {
+      "name": "Optimize (select best candidate)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"candidates\": [\n    {\"state\": {\"lots\": []}},\n    {\"state\": {\"lots\": []}}\n  ]\n}"
+        },
+        "url": "{{base_url}}/frame/{{frame_id}}/optimize"
+      }
+    },
+    {
+      "name": "Optimize Stream (GET SSE)",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/frame/{{frame_id}}/optimize/stream?strategy=greedy&max_iter=3"
+      }
+    },
+    {
+      "name": "Optimize Stream (POST SSE)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"strategy\": \"ga\",\n  \"max_iter\": 5\n}" },
+        "url": "{{base_url}}/frame/{{frame_id}}/optimize/streaming"
+      }
+    }
+  ]
+}

@@ -97,7 +97,7 @@ class Machine(BaseModel):
     name: str
     process_code: str
     shifts: Optional[List[str]] = None
-    capacity_by_bucket: Dict[str, float] = Field(default_factory=dict, validation_alias=AliasChoices("capacity_by_bucket", "weekly_capacity"))
+    capacity_by_bucket: Optional[Dict[str, float]] = Field(default_factory=dict, validation_alias=AliasChoices("capacity_by_bucket", "weekly_capacity"))
     shift_templates_code: Optional[str] = None
 
 
@@ -108,7 +108,7 @@ class Mold(BaseModel):
     cavities: Optional[int] = None
     eye: Optional[int] = None
     supported_products: Optional[List[str]] = None
-    supported_products_id: Optional[List[int]] = None
+    supported_products_id: Optional[List[int | str]] = None
     compatible_machines: Optional[List[int]] = None
     compatible_machines_id: Optional[List[int]] = None
 

@@ -360,6 +360,9 @@ def build_product_layer_demand_and_inventory(ctx):
             b = lot["time_bucket_id"]
         else:
             b = datetime_to_bucket_id(lot["process_start_time"], tl["time_buckets"])
+        if b not in pl["production_out"].get(pcode, {}):
+            # unknown bucket -> skip accumulation; hard constraint will flag it
+            continue
         pl["production_out"][pcode][b] += float(lot["qty"])
 
     # demand_by_bucket (PATCHED)
@@ -430,6 +433,8 @@ def build_product_layer_process_flows(ctx):
             b = lot["time_bucket_id"]
         else:
             b = datetime_to_bucket_id(lot["process_start_time"], tl["time_buckets"])
+        if b not in pl["step_output_qty"].get(pcode, {}):
+            continue
 
         steps = idx["process_steps_by_product"].get(pcode, [])
         step = find_step(steps, lot["process_code"])
@@ -575,6 +580,9 @@ def build_resource_layer_usages_and_sequences(ctx):
                 continue
 
             # usage by bucket
+            if b not in rl["usage_bucket"].get(type_code, {}).get(rid, {}):
+                # unknown bucket; skip accumulation, constraint will handle
+                continue
             rl["usage_bucket"][type_code][rid][b] += total_hours
 
             # usage by date+segment

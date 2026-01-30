@@ -10,6 +10,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -36,6 +37,7 @@ def deep_copy(payload: dict) -> dict:
     return json.loads(json.dumps(payload))
 
 
+@pytest.mark.normalizer
 def scenario_basic_validation() -> None:
     # TR: Ornek verinin model ve referans dogrulamasindan gectigini test eder.
     # EN: Ensures the sample data passes model and reference validation.
@@ -46,6 +48,7 @@ def scenario_basic_validation() -> None:
         raise AssertionError(f"Validation errors: {errors}")
 
 
+@pytest.mark.api
 def scenario_api_post_get() -> None:
     # TR: /frame olusturma ve /frame/{id} okuma akisini test eder.
     # EN: Tests create/read flow for /frame and /frame/{id}.
@@ -56,6 +59,7 @@ def scenario_api_post_get() -> None:
         raise AssertionError(f"GET /frame/{{id}} failed: {resp2.text}")
 
 
+@pytest.mark.api
 def scenario_api_validate() -> None:
     # TR: /frame/{id}/validate endpointinin basarili calistigini test eder.
     # EN: Tests that /frame/{id}/validate works and returns valid=true.
@@ -68,6 +72,7 @@ def scenario_api_validate() -> None:
         raise AssertionError(f"Expected valid frame, got: {resp2.text}")
 
 
+@pytest.mark.api
 def scenario_api_evaluate() -> None:
     # TR: /frame/{id}/evaluate endpointinden KPI dondugunu test eder.
     # EN: Tests that /frame/{id}/evaluate returns KPI payload.
@@ -95,6 +100,7 @@ def _get_frame_id() -> str:
     return _FRAME_ID
 
 
+@pytest.mark.api
 def scenario_invalid_process_code() -> None:
     # TR: Gecersiz process_code icin hata donmesini test eder.
     # EN: Tests validation error for an invalid process_code.
@@ -107,6 +113,7 @@ def scenario_invalid_process_code() -> None:
         raise AssertionError(f"Expected unknown process error, got: {errors}")
 
 
+@pytest.mark.api
 def scenario_invalid_product_code_in_orders() -> None:
     # TR: Sipariste gecersiz product_code icin hata donmesini test eder.
     # EN: Tests validation error for an invalid product_code in orders.
@@ -119,6 +126,7 @@ def scenario_invalid_product_code_in_orders() -> None:
         raise AssertionError(f"Expected unknown product error, got: {errors}")
 
 
+@pytest.mark.api
 def scenario_invalid_time_bucket_in_orders() -> None:
     # TR: Sipariste gecersiz week/time_bucket icin hata donmesini test eder.
     # EN: Tests validation error for an invalid week/time_bucket in orders.
@@ -131,6 +139,7 @@ def scenario_invalid_time_bucket_in_orders() -> None:
         raise AssertionError(f"Expected unknown time bucket error, got: {errors}")
 
 
+@pytest.mark.api
 def scenario_invalid_time_bucket_in_plan() -> None:
     # TR: Planda gecersiz week/time_bucket icin hata donmesini test eder.
     # EN: Tests validation error for an invalid week/time_bucket in plan.
@@ -143,6 +152,7 @@ def scenario_invalid_time_bucket_in_plan() -> None:
         raise AssertionError(f"Expected plan time bucket error, got: {errors}")
 
 
+@pytest.mark.api
 def scenario_incompatible_machine_mold() -> None:
     # TR: Uyumlu olmayan machine/mold kombinasyonunu test eder.
     # EN: Tests incompatible machine/mold combination handling.
@@ -155,6 +165,7 @@ def scenario_incompatible_machine_mold() -> None:
         raise AssertionError(f"Expected machine/mold compatibility error, got: {errors}")
 
 
+@pytest.mark.api
 def scenario_constraints_dict_normalization() -> None:
     # TR: constraints dict formatinin listeye normalize edildigini test eder.
     # EN: Tests dict-to-list normalization for constraints.
@@ -169,6 +180,7 @@ def scenario_constraints_dict_normalization() -> None:
         raise AssertionError("Expected constraints list after normalization")
 
 
+@pytest.mark.api
 def scenario_evaluate_state_runs() -> None:
     payload = load_json(DATA_DIR / "problemFrame.json")
     frame = load_problem_frame(payload)

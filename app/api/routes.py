@@ -10,6 +10,10 @@ from app.frame.ingest.problem_adapter import load_problem_frame
 from app.frame.models.problem import ProblemFrame, State
 from app.frame.services.frame_manager import FrameManager
 from app.optimization.optimizer import optimize_frame
+from fastapi.responses import StreamingResponse
+import asyncio
+import threading
+import json
 
 
 router = APIRouter()
@@ -78,3 +82,40 @@ def optimize(frame_id: str, payload: dict = Body(default=None)) -> dict:
         return optimize_frame(frame, payload or {})
     except NotImplementedError as exc:
         raise HTTPException(status_code=501, detail=str(exc))
+
+
+@router.get("/frame/{frame_id}/optimize/stream")
+async def optimize_stream(frame_id: str, strategy: str = "greedy", max_iter: int = 5) -> StreamingResponse:
+    frame = manager.get(frame_id)
+    if frame is None:
+        raise HTTPException(status_code=404, detail="Frame not found")
+
+    loop = asyncio.get_event_loop()
+    q: asyncio.Queue = asyncio.Queue()
+
+    def sink(event: dict) -> None:
+        loop.call_soon_threadsafe(q.put_nowait, event)
+
+    def worker():
+        res = optimize_frame(frame, {"strategy": strategy, "max_iter": max_iter}, event_sink=sink)
+        loop.call_soon_threadsafe(q.put_nowait, {"type": "done", "result": res})
+
+    threading.Thread(target=worker, daemon=True).start()
+
+    async def event_gen():
+        while True:
+            ev = await q.get()
+            if ev.get("type") == "done":
+                yield f"data: {json.dumps(ev)}\n\n"
+                break
+            else:
+                yield f"data: {json.dumps(ev)}\n\n"
+
+    return StreamingResponse(event_gen(), media_type="text/event-stream")
+
+
+@router.post("/frame/{frame_id}/optimize/streaming")
+async def optimize_stream_post(frame_id: str, payload: dict = Body(default=None)) -> StreamingResponse:
+    strategy = (payload or {}).get("strategy", "greedy")
+    max_iter = int((payload or {}).get("max_iter", 5))
+    return await optimize_stream(frame_id, strategy=strategy, max_iter=max_iter)

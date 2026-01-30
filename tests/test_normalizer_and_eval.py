@@ -4,6 +4,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.append(str(ROOT_DIR))
@@ -20,6 +22,7 @@ def _load_raw() -> dict:
     return json.loads((DATA_DIR / "problemFrame.json").read_text(encoding="utf-8"))
 
 
+@pytest.mark.normalizer
 def test_normalizer_resources_and_orders():
     raw = _load_raw()
     norm = normalize_problem_frame(raw)
@@ -34,6 +37,7 @@ def test_normalizer_resources_and_orders():
     assert orders.get("due_date") is not None
 
 
+@pytest.mark.normalizer
 def test_state_assigned_resources_and_bucket():
     raw = _load_raw()
     norm = normalize_problem_frame(raw)
@@ -43,6 +47,7 @@ def test_state_assigned_resources_and_bucket():
     assert lot["time_bucket_id"] == "CW43_25"
 
 
+@pytest.mark.api
 def test_evaluate_state_runs_and_penalty_night_change():
     raw = _load_raw()
     norm = normalize_problem_frame(raw)
