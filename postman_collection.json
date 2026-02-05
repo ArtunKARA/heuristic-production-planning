@@ -6,21 +6,41 @@
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
-    { "key": "base_url", "value": "http://127.0.0.1:8000" },
-    { "key": "frame_id", "value": "" },
-    { "key": "frame_payload", "value": "" }
+    {
+      "key": "base_url",
+      "value": "http://127.0.0.1:8000"
+    },
+    {
+      "key": "frame_id",
+      "value": ""
+    },
+    {
+      "key": "frame_payload",
+      "value": ""
+    }
   ],
   "item": [
     {
       "name": "Health",
-      "request": { "method": "GET", "url": "{{base_url}}/health" }
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/health"
+      }
     },
     {
       "name": "Create Frame",
       "request": {
         "method": "POST",
-        "header": [{ "key": "Content-Type", "value": "application/json" }],
-        "body": { "mode": "raw", "raw": "{{frame_payload}}" },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{{frame_payload}}"
+        },
         "url": "{{base_url}}/frame"
       },
       "event": [
@@ -38,21 +58,35 @@
     },
     {
       "name": "Get Frame",
-      "request": { "method": "GET", "url": "{{base_url}}/frame/{{frame_id}}" }
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/frame/{{frame_id}}"
+      }
     },
     {
       "name": "Validate Frame",
-      "request": { "method": "POST", "url": "{{base_url}}/frame/{{frame_id}}/validate" }
+      "request": {
+        "method": "POST",
+        "url": "{{base_url}}/frame/{{frame_id}}/validate"
+      }
     },
     {
       "name": "Evaluate Frame",
-      "request": { "method": "POST", "url": "{{base_url}}/frame/{{frame_id}}/evaluate" }
+      "request": {
+        "method": "POST",
+        "url": "{{base_url}}/frame/{{frame_id}}/evaluate"
+      }
     },
     {
       "name": "Optimize (select best candidate)",
       "request": {
         "method": "POST",
-        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
         "body": {
           "mode": "raw",
           "raw": "{\n  \"candidates\": [\n    {\"state\": {\"lots\": []}},\n    {\"state\": {\"lots\": []}}\n  ]\n}"
@@ -71,10 +105,86 @@
       "name": "Optimize Stream (POST SSE)",
       "request": {
         "method": "POST",
-        "header": [{ "key": "Content-Type", "value": "application/json" }],
-        "body": { "mode": "raw", "raw": "{\n  \"strategy\": \"ga\",\n  \"max_iter\": 5\n}" },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"strategy\": \"ga\",\n  \"max_iter\": 5\n}"
+        },
         "url": "{{base_url}}/frame/{{frame_id}}/optimize/streaming"
       }
+    },
+    {
+      "name": "SSE",
+      "item": [
+        {
+          "name": "SSE - Create Frame (returns algorithms)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{{frame_payload}}"
+            },
+            "url": "{{base_url}}/sse/frame"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', function(){ pm.response.to.have.status(200); });",
+                  "var id = pm.response.json().id; pm.collectionVariables.set('frame_id', id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "SSE - Algorithms (by problemData)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"problemData\": {}\n}"
+            },
+            "url": "{{base_url}}/sse/algorithms"
+          }
+        },
+        {
+          "name": "SSE - Optimize Stream (POST)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"frame_id\": \"{{frame_id}}\",\n  \"strategy\": \"ga\",\n  \"max_iter\": 5\n}"
+            },
+            "url": "{{base_url}}/sse/optimize/stream"
+          }
+        }
+      ]
     }
   ]
 }

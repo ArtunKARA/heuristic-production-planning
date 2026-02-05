@@ -122,6 +122,36 @@ def _mutate_mold(state: Dict[str, Any], alt_mold: str) -> Dict[str, Any]:
     return mutated
 
 
+def list_algorithms(problem: Dict[str, Any] | None = None) -> List[Dict[str, Any]]:
+    molds = (problem or {}).get("resources", {}).get("molds", []) if problem else []
+    has_molds = bool(molds and len(molds) > 1)
+    algos = [
+        {
+            "code": "greedy",
+            "name": "Greedy",
+            "params": {"max_iter": {"type": "int", "default": 1, "min": 1, "max": 1}},
+        },
+        {
+            "code": "ga",
+            "name": "GA",
+            "params": {"max_iter": {"type": "int", "default": 5, "min": 1, "max": 200}},
+        },
+        {
+            "code": "tabu",
+            "name": "Tabu",
+            "params": {"max_iter": {"type": "int", "default": 5, "min": 1, "max": 200}},
+        },
+        {
+            "code": "gatabu",
+            "name": "GA+Tabu",
+            "params": {"max_iter": {"type": "int", "default": 5, "min": 1, "max": 200}},
+        },
+    ]
+    if not has_molds:
+        algos = [a for a in algos if a["code"] in ("greedy", "ga")]
+    return algos
+
+
 def optimize_frame(frame: ProblemFrame, payload: Dict[str, object], event_sink: Callable[[Dict[str, Any]], None] | None = None) -> Dict[str, object]:
     """
     Simple strategy-based optimizer (placeholder for heuristics GA/Tabu etc.):
