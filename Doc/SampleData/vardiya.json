@@ -1,0 +1,30 @@
+ {"shift_templates": [
+    {
+      "id": "S3", "name": "3'lü Vardiya",
+      "segments": [
+        {"code": "NIGHT", "start": "00:00", "end": "08:00", "mold_change_allowed": false},
+        {"code": "DAY",   "start": "08:00", "end": "16:00", "mold_change_allowed": true},
+        {"code": "EVE",   "start": "16:00", "end": "24:00", "mold_change_allowed": true}
+      ]
+    },
+    {
+      "id": "S2A", "name": "2'li Vardiya (08-16 / 16-24)",
+      "segments": [
+        {"code": "DAY", "start": "08:00", "end": "16:00", "mold_change_allowed": true},
+        {"code": "EVE", "start": "16:00", "end": "24:00", "mold_change_allowed": false}
+      ]
+    },
+    {
+      "id": "S2B", "name": "2'li Vardiya (08-20)",
+      "segments": [
+        {"code": "DAYLONG", "start": "08:00", "end": "20:00", "mold_change_allowed": true}
+      ]
+    },
+    {
+      "id": "S1", "name": "Tekli Vardiya (08-18)",
+      "segments": [
+        {"code": "DAY", "start": "08:00", "end": "18:00", "mold_change_allowed": true}
+      ]
+    }
+  ]
+}
