@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, date
 from typing import Any, Dict, List, Tuple
 
 from .base import Algorithm, AlgorithmContext, AlgorithmSpec
-from .greedy import build_plan as build_greedy_plan
+from .utils import is_better, select_initial_state
 
 
 def _shift_time(dt_str: str, delta_hours: float) -> str:
@@ -200,9 +200,10 @@ def _ga_search(
     start_state: Dict[str, Any],
     start_eval: Dict[str, Any],
     record_base: bool,
+    base_label: str = "greedy",
 ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     if record_base:
-        ctx.record(start_state, start_eval, "greedy")
+        ctx.record(start_state, start_eval, base_label)
 
     cur_best_state = start_state
     cur_best_eval = start_eval
@@ -223,19 +224,15 @@ def _ga_search(
         )
         m_eval = ctx.evaluate(mutated)
         ctx.record(mutated, m_eval, f"ga-{step_idx}")
-        if (m_eval.get("feasible", False) and not cur_best_eval.get("feasible", False)) or (
-            m_eval.get("feasible", False) == cur_best_eval.get("feasible", False)
-            and float(m_eval.get("total_cost", 1e18)) < float(cur_best_eval.get("total_cost", 1e18))
-        ):
+        if is_better(m_eval, cur_best_eval):
             cur_best_state, cur_best_eval = mutated, m_eval
 
     return cur_best_state, cur_best_eval
 
 
 def run(ctx: AlgorithmContext) -> tuple[Dict[str, Any], Dict[str, Any]]:
-    base_state = build_greedy_plan(ctx.problem)
-    base_eval = ctx.evaluate(base_state)
-    return _ga_search(ctx, start_state=base_state, start_eval=base_eval, record_base=True)
+    base_state, base_eval, base_label = select_initial_state(ctx)
+    return _ga_search(ctx, start_state=base_state, start_eval=base_eval, record_base=True, base_label=base_label)
 
 
 ALGO = Algorithm(
@@ -245,12 +242,12 @@ ALGO = Algorithm(
         params={
             "max_iter": {"type": "int", "default": 5, "min": 1, "max": 200},
             "time_shift_hours": {"type": "float", "default": 2.0, "min": -24, "max": 24},
-            "bucket_shift": {"type": "int", "default": 0, "min": -5, "max": 5},
-            "bucket_shift_rate": {"type": "float", "default": 0.0, "min": 0.0, "max": 1.0},
-            "qty_jitter_pct": {"type": "float", "default": 0.0, "min": 0.0, "max": 1.0},
-            "qty_jitter_rate": {"type": "float", "default": 0.0, "min": 0.0, "max": 1.0},
-            "machine_swap_rate": {"type": "float", "default": 0.0, "min": 0.0, "max": 1.0},
-            "mold_swap_rate": {"type": "float", "default": 0.0, "min": 0.0, "max": 1.0},
+            "bucket_shift": {"type": "int", "default": 1, "min": -5, "max": 5},
+            "bucket_shift_rate": {"type": "float", "default": 0.25, "min": 0.0, "max": 1.0},
+            "qty_jitter_pct": {"type": "float", "default": 0.05, "min": 0.0, "max": 1.0},
+            "qty_jitter_rate": {"type": "float", "default": 0.2, "min": 0.0, "max": 1.0},
+            "machine_swap_rate": {"type": "float", "default": 0.1, "min": 0.0, "max": 1.0},
+            "mold_swap_rate": {"type": "float", "default": 0.1, "min": 0.0, "max": 1.0},
             "mutation_seed": {"type": "int", "default": 0, "min": 0, "max": 999999},
         },
     ),

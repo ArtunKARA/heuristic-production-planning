@@ -307,6 +307,18 @@ function renderAlgoParams() {
     `;
     container.appendChild(descRow);
   }
+  if (code === "tabu") {
+    const warnRow = document.createElement("div");
+    warnRow.className = "list-item";
+    warnRow.innerHTML = `
+      <div>
+        <strong>Uyarı</strong>
+        <span class="desc">Tabu, varsayılan olarak sınırlı komşuluk üretir. Bucket/qty/makine/kalıp oranlarını sıfırdan farklı yapmazsan sonuçlar düz kalabilir.</span>
+      </div>
+      <div class="meta">uyarı</div>
+    `;
+    container.appendChild(warnRow);
+  }
   const params = algo.params || {};
   for (const [key, meta] of Object.entries(params)) {
     const desc = meta.desc || PARAM_DESC[key] || "";

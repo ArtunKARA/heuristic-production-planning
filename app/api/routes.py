@@ -136,6 +136,10 @@ async def sse_optimize_stream(payload: dict = Body(default=None)) -> StreamingRe
 
     strategy = (data.get("strategy") or "greedy").lower()
     max_iter = int(data.get("max_iter") or 5)
+    algo_payload = dict(data)
+    algo_payload.pop("frame_id", None)
+    algo_payload["strategy"] = strategy
+    algo_payload["max_iter"] = max_iter
 
     loop = asyncio.get_event_loop()
     q: asyncio.Queue = asyncio.Queue()
@@ -145,7 +149,7 @@ async def sse_optimize_stream(payload: dict = Body(default=None)) -> StreamingRe
 
     def worker():
         try:
-            res = optimize_frame(frame, {"strategy": strategy, "max_iter": max_iter}, event_sink=sink)
+            res = optimize_frame(frame, algo_payload, event_sink=sink)
             loop.call_soon_threadsafe(q.put_nowait, {"type": "done", "result": res})
         except Exception as exc:  # keep error event in stream
             loop.call_soon_threadsafe(q.put_nowait, {"type": "error", "error": str(exc)})
@@ -153,7 +157,7 @@ async def sse_optimize_stream(payload: dict = Body(default=None)) -> StreamingRe
     threading.Thread(target=worker, daemon=True).start()
 
     async def event_gen():
-        yield f"data: {json.dumps({'type': 'meta', 'strategy': strategy, 'max_iter': max_iter})}\n\n"
+        yield f"data: {json.dumps({'type': 'meta', 'strategy': strategy, 'max_iter': max_iter, 'payload': algo_payload})}\n\n"
         while True:
             ev = await q.get()
             yield f"data: {json.dumps(ev)}\n\n"
@@ -194,6 +198,37 @@ async def optimize_stream(frame_id: str, strategy: str = "greedy", max_iter: int
 
 @router.post("/frame/{frame_id}/optimize/streaming")
 async def optimize_stream_post(frame_id: str, payload: dict = Body(default=None)) -> StreamingResponse:
-    strategy = (payload or {}).get("strategy", "greedy")
-    max_iter = int((payload or {}).get("max_iter", 5))
-    return await optimize_stream(frame_id, strategy=strategy, max_iter=max_iter)
+    data = payload or {}
+    strategy = (data.get("strategy") or "greedy").lower()
+    max_iter = int(data.get("max_iter") or 5)
+    algo_payload = dict(data)
+    algo_payload["strategy"] = strategy
+    algo_payload["max_iter"] = max_iter
+    algo_payload.pop("frame_id", None)
+
+    frame = manager.get(frame_id)
+    if frame is None:
+        raise HTTPException(status_code=404, detail="Frame not found")
+
+    loop = asyncio.get_event_loop()
+    q: asyncio.Queue = asyncio.Queue()
+
+    def sink(event: dict) -> None:
+        loop.call_soon_threadsafe(q.put_nowait, event)
+
+    def worker():
+        res = optimize_frame(frame, algo_payload, event_sink=sink)
+        loop.call_soon_threadsafe(q.put_nowait, {"type": "done", "result": res})
+
+    threading.Thread(target=worker, daemon=True).start()
+
+    async def event_gen():
+        while True:
+            ev = await q.get()
+            if ev.get("type") == "done":
+                yield f"data: {json.dumps(ev)}\n\n"
+                break
+            else:
+                yield f"data: {json.dumps(ev)}\n\n"
+
+    return StreamingResponse(event_gen(), media_type="text/event-stream")

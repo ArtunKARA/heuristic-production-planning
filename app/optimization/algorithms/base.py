@@ -26,6 +26,7 @@ class AlgorithmContext:
         problem: Dict[str, Any],
         scenario: Dict[str, Any],
         payload: Dict[str, Any],
+        frame_state: Dict[str, Any],
         evaluate: Callable[[Dict[str, Any]], Dict[str, Any]],
         record: Callable[[Dict[str, Any], Dict[str, Any], str], None],
         build_greedy_plan: Callable[[Dict[str, Any]], Dict[str, Any]],
@@ -33,6 +34,7 @@ class AlgorithmContext:
         self.problem = problem
         self.scenario = scenario
         self.payload = payload
+        self.frame_state = frame_state
         self.evaluate = evaluate
         self.record = record
         self.build_greedy_plan = build_greedy_plan

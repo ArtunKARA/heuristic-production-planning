@@ -42,6 +42,7 @@ def optimize_frame(
     norm = normalize_problem_frame(raw)
     problem = norm["problemData"]
     scenario = norm["scenarioConfig"]
+    frame_state = norm.get("state") or {}
 
     strategy = (payload.get("strategy") or "greedy").lower()
     algo = get_algorithm(strategy) or get_algorithm("greedy")
@@ -87,6 +88,7 @@ def optimize_frame(
         problem=problem,
         scenario=scenario,
         payload=payload,
+        frame_state=frame_state,
         evaluate=evaluate_state_dict,
         record=record,
         build_greedy_plan=build_greedy_plan,
