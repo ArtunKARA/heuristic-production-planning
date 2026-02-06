@@ -26,7 +26,8 @@ def run(ctx: AlgorithmContext) -> tuple[Dict[str, Any], Dict[str, Any]]:
 ALGO = Algorithm(
     spec=AlgorithmSpec(
         code="gatabu",
-        name="GA+Tabu",
+        name="GA+Tabu (Sequential)",
+        desc="Önce GA çalıştırılır, ardından en iyi sonuç üzerinde tabu uygulanır.",
         params={
             "max_iter": {"type": "int", "default": 5, "min": 1, "max": 200},
             "time_shift_hours": {"type": "float", "default": 2.0, "min": -24, "max": 24},

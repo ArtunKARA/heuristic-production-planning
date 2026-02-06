@@ -56,6 +56,8 @@ const ALGO_DESC = {
   ga: "Evrimsel arama (GA) ile iteratif iyileştirme.",
   tabu: "Tabu arama ile yerel minimumdan kaçış.",
   gatabu: "GA sonrası tabu iyileştirmesi.",
+  ga_tabu_inline: "GA içinde, jenerasyonlarda kısa tabu iyileştirmesi.",
+  ga_tabu_topk: "GA sonrası en iyi K adayda tabu iyileştirmesi.",
 };
 
 const PARAM_DESC = {
@@ -68,6 +70,10 @@ const PARAM_DESC = {
   machine_swap_rate: "Makine swap uygulanma oranı (0-1).",
   mold_swap_rate: "Kalıp swap uygulanma oranı (0-1).",
   mutation_seed: "Mutasyon için seed (0 = rastgele).",
+  population_size: "GA popülasyon boyutu.",
+  tabu_iter: "Kısa tabu iterasyon sayısı.",
+  tabu_rate: "Tabu uygulama oranı (0-1).",
+  top_k: "GA sonrası tabu uygulanacak aday sayısı.",
 };
 
 function setStatus(text, ok = true) {
