@@ -1,0 +1,38 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any, Callable, Dict, Optional, Tuple
+
+
+@dataclass
+class AlgorithmSpec:
+    code: str
+    name: str
+    params: Dict[str, Any]
+    desc: Optional[str] = None
+
+
+@dataclass
+class Algorithm:
+    spec: AlgorithmSpec
+    planned_iterations: Callable[[Dict[str, Any]], int]
+    run: Callable[["AlgorithmContext"], Tuple[Dict[str, Any], Dict[str, Any]]]
+
+
+class AlgorithmContext:
+    def __init__(
+        self,
+        *,
+        problem: Dict[str, Any],
+        scenario: Dict[str, Any],
+        payload: Dict[str, Any],
+        evaluate: Callable[[Dict[str, Any]], Dict[str, Any]],
+        record: Callable[[Dict[str, Any], Dict[str, Any], str], None],
+        build_greedy_plan: Callable[[Dict[str, Any]], Dict[str, Any]],
+    ) -> None:
+        self.problem = problem
+        self.scenario = scenario
+        self.payload = payload
+        self.evaluate = evaluate
+        self.record = record
+        self.build_greedy_plan = build_greedy_plan

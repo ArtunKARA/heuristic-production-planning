@@ -84,9 +84,18 @@ def evaluate_state(state: Dict[str, Any], problemData: Dict[str, Any], scenarioC
 
     kpi_results: Dict[str, float] = {t["code"]: float(t.get("value", 0.0)) for t in res["soft"].get("terms", [])}
 
+    hard_total = float(res.get("hard", {}).get("total", 0.0))
+    soft_total = float(res["soft"].get("total_cost", 0.0))
+    weights = (scenario or {}).get("weights", {}) or {}
+    hard_weight = float(weights.get("w_hard_penalty", 1.0))
+    total_score = soft_total + (hard_weight * hard_total)
+
     return {
         "feasible": bool(res.get("feasible", False)),
-        "total_cost": float(res["soft"].get("total_cost", 0.0)),
+        "total_cost": soft_total,
+        "hard_total": hard_total,
+        "hard_penalty_weight": hard_weight,
+        "total_score": total_score,
         "constraint_results": constraint_results,
         "kpi_results": kpi_results,
     }

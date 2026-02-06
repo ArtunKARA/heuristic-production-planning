@@ -26,6 +26,9 @@ def evaluate_frame(frame: ProblemFrame) -> Dict[str, object]:
         "errors": [],
         "feasible": res["feasible"],
         "total_cost": res["total_cost"],
+        "hard_total": res.get("hard_total", 0.0),
+        "hard_penalty_weight": res.get("hard_penalty_weight", 1.0),
+        "total_score": res.get("total_score", res["total_cost"]),
         "constraint_results": res["constraint_results"],
         "kpi_results": res["kpi_results"],
     }

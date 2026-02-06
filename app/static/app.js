@@ -29,6 +29,10 @@ const SOFT_TOGGLES = [
   { code: "SOFT_MACHINE_COUNT_LOW", weight: "w_machine_count" },
 ];
 
+const SCORE_WEIGHTS = [
+  { key: "w_hard_penalty", label: "HARD_PENALTY_WEIGHT" },
+];
+
 const HARD_DESC = {
   HARD_DUE_DATE_FULFILLMENT: "Siparişler son tarihe kadar tamamlanmalı.",
   HARD_RESOURCE_ROLE_ASSIGNED: "Her lot için makine/kalıp gibi zorunlu roller atanmalı.",
@@ -56,6 +60,14 @@ const ALGO_DESC = {
 
 const PARAM_DESC = {
   max_iter: "Maksimum iterasyon sayısı.",
+  time_shift_hours: "Zaman kaydırma (saat).",
+  bucket_shift: "Bucket kaydırma (index adımı).",
+  bucket_shift_rate: "Bucket kaydırma uygulanma oranı (0-1).",
+  qty_jitter_pct: "Lot miktarı için yüzde jitter (0-1).",
+  qty_jitter_rate: "Miktar jitter uygulanma oranı (0-1).",
+  machine_swap_rate: "Makine swap uygulanma oranı (0-1).",
+  mold_swap_rate: "Kalıp swap uygulanma oranı (0-1).",
+  mutation_seed: "Mutasyon için seed (0 = rastgele).",
 };
 
 function setStatus(text, ok = true) {
@@ -158,6 +170,18 @@ function renderConstraints() {
         <span class="desc">${desc} (weight: ${entry.weight})</span>
       </div>
       <input type="number" step="0.1" value="1" data-weight="${entry.weight}" />
+    `;
+    container.appendChild(item);
+  }
+  for (const entry of SCORE_WEIGHTS) {
+    const item = document.createElement("div");
+    item.className = "list-item";
+    item.innerHTML = `
+      <div>
+        <label>${entry.label}</label>
+        <span class="desc">Skor için hard ihlal ağırlığı (weight: ${entry.key})</span>
+      </div>
+      <input type="number" step="0.1" value="1" data-weight="${entry.key}" />
     `;
     container.appendChild(item);
   }
@@ -343,7 +367,7 @@ function logIteration(ev) {
   const entry = document.createElement("div");
   entry.className = "log-entry";
   if (ev.type === "iteration") {
-    entry.textContent = `#${ev.iteration_no} | feasible=${ev.feasible} | cost=${ev.total_cost}`;
+    entry.textContent = `#${ev.iteration_no} | feasible=${ev.feasible} | cost=${ev.total_cost} | score=${ev.total_score ?? ev.total_cost}`;
   } else if (ev.type === "meta") {
     entry.textContent = `SSE başlatıldı: strategy=${ev.strategy}, max_iter=${ev.max_iter}`;
   } else if (ev.type === "done") {
