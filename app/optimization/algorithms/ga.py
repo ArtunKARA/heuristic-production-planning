@@ -13,6 +13,29 @@ def _shift_time(dt_str: str, delta_hours: float) -> str:
     return (dt + timedelta(hours=delta_hours)).isoformat()
 
 
+def _positive_int(value: Any, default: int = 1) -> int:
+    try:
+        parsed = int(float(value))
+    except (TypeError, ValueError):
+        return default
+    return parsed if parsed > 0 else default
+
+
+def _quantize_qty_to_cavity(qty: Any, cavity_step: int) -> float:
+    step = max(1, _positive_int(cavity_step, 1))
+    try:
+        value = float(qty)
+    except (TypeError, ValueError):
+        value = 0.0
+    if value <= 0.0:
+        return 0.0
+    # keep quantities as cavity-multiples (e.g. eye=100 => 100,200,...)
+    quantized = step * int(value // step)
+    if quantized <= 0:
+        quantized = step
+    return float(quantized)
+
+
 def _build_compat_indexes(problem: Dict[str, Any]) -> Dict[str, Any]:
     machines = problem.get("resources", {}).get("machines", [])
     molds = problem.get("resources", {}).get("molds", [])
@@ -30,14 +53,19 @@ def _build_compat_indexes(problem: Dict[str, Any]) -> Dict[str, Any]:
         machines_by_process.setdefault(m.get("process_code"), []).append(m)
 
     molds_by_process = {}
+    mold_eye_by_code = {}
     for m in molds:
         molds_by_process.setdefault(m.get("process_code"), []).append(m)
+        code = m.get("code")
+        if code and code not in mold_eye_by_code:
+            mold_eye_by_code[code] = _positive_int(m.get("eye"), 1)
 
     return {
         "machines_by_process": machines_by_process,
         "molds_by_process": molds_by_process,
         "compat_pairs": compat_pairs,
         "product_molds": product_molds,
+        "mold_eye_by_code": mold_eye_by_code,
     }
 
 
@@ -110,6 +138,13 @@ def _mutate_state(
     machine_swap_rate = float(mutation_cfg.get("machine_swap_rate") or 0.0)
     mold_swap_rate = float(mutation_cfg.get("mold_swap_rate") or 0.0)
 
+    def cavity_step_for_lot(lot_obj: Dict[str, Any]) -> int:
+        ar_obj = lot_obj.get("assigned_resources", {}) or {}
+        mold_code = ar_obj.get("mold")
+        if not mold_code:
+            return 1
+        return _positive_int(compat.get("mold_eye_by_code", {}).get(mold_code), 1)
+
     mutated = {"lots": []}
     for lot in state.get("lots", []):
         lot_copy = dict(lot)
@@ -171,6 +206,10 @@ def _mutate_state(
                 if alt:
                     ar["mold"] = rng.choice(alt).get("code")
 
+        # enforce discrete lot quantities based on mold eye/cavity count
+        if "qty" in lot_copy:
+            lot_copy["qty"] = _quantize_qty_to_cavity(lot_copy.get("qty", 0.0), cavity_step_for_lot(lot_copy))
+
         mutated["lots"].append(lot_copy)
 
     return mutated
@@ -178,7 +217,7 @@ def _mutate_state(
 
 def _mutation_config(payload: Dict[str, Any]) -> Dict[str, Any]:
     return {
-        "time_shift_hours": float(payload.get("time_shift_hours", 2.0)),
+        "time_shift_hours": float(payload.get("time_shift_hours", 0.0)),
         "bucket_shift": int(payload.get("bucket_shift", 0)),
         "bucket_shift_rate": float(payload.get("bucket_shift_rate", 0.0)),
         "qty_jitter_pct": float(payload.get("qty_jitter_pct", 0.0)),
@@ -211,7 +250,7 @@ def _ga_search(
     payload = ctx.payload
     mutation_cfg = _mutation_config(payload)
     max_iter = int(payload.get("max_iter", 5))
-    time_shift_hours = float(mutation_cfg.get("time_shift_hours", 2.0))
+    time_shift_hours = float(mutation_cfg.get("time_shift_hours", 0.0))
 
     for step_idx in range(1, max_iter + 1):
         delta = time_shift_hours if (step_idx % 2 == 1) else -time_shift_hours
@@ -240,15 +279,15 @@ ALGO = Algorithm(
         code="ga",
         name="GA",
         params={
-            "max_iter": {"type": "int", "default": 5, "min": 1, "max": 200},
-            "time_shift_hours": {"type": "float", "default": 2.0, "min": -24, "max": 24},
+            "max_iter": {"type": "int", "default": 50, "min": 1, "max": 200},
+            "time_shift_hours": {"type": "float", "default": 0.0, "min": -24, "max": 24},
             "bucket_shift": {"type": "int", "default": 1, "min": -5, "max": 5},
-            "bucket_shift_rate": {"type": "float", "default": 0.25, "min": 0.0, "max": 1.0},
+            "bucket_shift_rate": {"type": "float", "default": 0.5, "min": 0.0, "max": 1.0},
             "qty_jitter_pct": {"type": "float", "default": 0.05, "min": 0.0, "max": 1.0},
-            "qty_jitter_rate": {"type": "float", "default": 0.2, "min": 0.0, "max": 1.0},
-            "machine_swap_rate": {"type": "float", "default": 0.1, "min": 0.0, "max": 1.0},
-            "mold_swap_rate": {"type": "float", "default": 0.1, "min": 0.0, "max": 1.0},
-            "mutation_seed": {"type": "int", "default": 0, "min": 0, "max": 999999},
+            "qty_jitter_rate": {"type": "float", "default": 0.35, "min": 0.0, "max": 1.0},
+            "machine_swap_rate": {"type": "float", "default": 0.15, "min": 0.0, "max": 1.0},
+            "mold_swap_rate": {"type": "float", "default": 0.15, "min": 0.0, "max": 1.0},
+            "mutation_seed": {"type": "int", "default": 42, "min": 0, "max": 999999},
         },
     ),
     planned_iterations=planned_iterations,

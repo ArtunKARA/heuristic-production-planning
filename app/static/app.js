@@ -33,6 +33,14 @@ const SCORE_WEIGHTS = [
   { key: "w_hard_penalty", label: "HARD_PENALTY_WEIGHT" },
 ];
 
+const DEFAULT_SCENARIO_WEIGHTS = {
+  w_mold_change: 10.0,
+  w_night_mold_change: 100.0,
+  w_inventory: 1.0,
+  w_machine_count: 5.0,
+  w_hard_penalty: 1.0,
+};
+
 const HARD_DESC = {
   HARD_DUE_DATE_FULFILLMENT: "Siparişler son tarihe kadar tamamlanmalı.",
   HARD_RESOURCE_ROLE_ASSIGNED: "Her lot için makine/kalıp gibi zorunlu roller atanmalı.",
@@ -167,6 +175,7 @@ function renderConstraints() {
     const item = document.createElement("div");
     item.className = "list-item";
     const desc = SOFT_DESC[entry.code] || "";
+    const defaultWeight = DEFAULT_SCENARIO_WEIGHTS[entry.weight] ?? 1.0;
     item.innerHTML = `
       <div>
         <label>
@@ -175,19 +184,20 @@ function renderConstraints() {
         </label>
         <span class="desc">${desc} (weight: ${entry.weight})</span>
       </div>
-      <input type="number" step="0.1" value="1" data-weight="${entry.weight}" />
+      <input type="number" step="0.1" value="${defaultWeight}" data-weight="${entry.weight}" />
     `;
     container.appendChild(item);
   }
   for (const entry of SCORE_WEIGHTS) {
     const item = document.createElement("div");
     item.className = "list-item";
+    const defaultWeight = DEFAULT_SCENARIO_WEIGHTS[entry.key] ?? 1.0;
     item.innerHTML = `
       <div>
         <label>${entry.label}</label>
         <span class="desc">Skor için hard ihlal ağırlığı (weight: ${entry.key})</span>
       </div>
-      <input type="number" step="0.1" value="1" data-weight="${entry.key}" />
+      <input type="number" step="0.1" value="${defaultWeight}" data-weight="${entry.key}" />
     `;
     container.appendChild(item);
   }

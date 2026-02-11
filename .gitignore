@@ -38,3 +38,6 @@ node_modules/
 # Local libs (installed dependencies)
 lib/
 Lib/
+
+#Personal Datas
+Doc/SampleData/

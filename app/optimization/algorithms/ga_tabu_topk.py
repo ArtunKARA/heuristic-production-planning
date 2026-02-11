@@ -43,7 +43,7 @@ def run(ctx: AlgorithmContext) -> tuple[Dict[str, Any], Dict[str, Any]]:
     population_size = max(1, int(payload.get("population_size", 6)))
     top_k = max(1, int(payload.get("top_k", 3)))
     tabu_iter = max(0, int(payload.get("tabu_iter", 3)))
-    time_shift_hours = float(mutation_cfg.get("time_shift_hours", 2.0))
+    time_shift_hours = float(mutation_cfg.get("time_shift_hours", 0.0))
 
     cur_best_state = base_state
     cur_best_eval = base_eval
@@ -95,18 +95,18 @@ ALGO = Algorithm(
         name="GA+Tabu (Top-K)",
         desc="GA sonrası en iyi K aday üzerinde kısa tabu iyileştirmesi uygulanır.",
         params={
-            "max_iter": {"type": "int", "default": 5, "min": 1, "max": 200},
-            "population_size": {"type": "int", "default": 6, "min": 1, "max": 50},
-            "top_k": {"type": "int", "default": 3, "min": 1, "max": 20},
-            "tabu_iter": {"type": "int", "default": 3, "min": 0, "max": 50},
-            "time_shift_hours": {"type": "float", "default": 2.0, "min": -24, "max": 24},
+            "max_iter": {"type": "int", "default": 50, "min": 1, "max": 200},
+            "population_size": {"type": "int", "default": 20, "min": 1, "max": 50},
+            "top_k": {"type": "int", "default": 5, "min": 1, "max": 20},
+            "tabu_iter": {"type": "int", "default": 30, "min": 0, "max": 50},
+            "time_shift_hours": {"type": "float", "default": 0.0, "min": -24, "max": 24},
             "bucket_shift": {"type": "int", "default": 1, "min": -5, "max": 5},
-            "bucket_shift_rate": {"type": "float", "default": 0.25, "min": 0.0, "max": 1.0},
+            "bucket_shift_rate": {"type": "float", "default": 0.5, "min": 0.0, "max": 1.0},
             "qty_jitter_pct": {"type": "float", "default": 0.05, "min": 0.0, "max": 1.0},
-            "qty_jitter_rate": {"type": "float", "default": 0.2, "min": 0.0, "max": 1.0},
-            "machine_swap_rate": {"type": "float", "default": 0.1, "min": 0.0, "max": 1.0},
-            "mold_swap_rate": {"type": "float", "default": 0.1, "min": 0.0, "max": 1.0},
-            "mutation_seed": {"type": "int", "default": 0, "min": 0, "max": 999999},
+            "qty_jitter_rate": {"type": "float", "default": 0.35, "min": 0.0, "max": 1.0},
+            "machine_swap_rate": {"type": "float", "default": 0.15, "min": 0.0, "max": 1.0},
+            "mold_swap_rate": {"type": "float", "default": 0.15, "min": 0.0, "max": 1.0},
+            "mutation_seed": {"type": "int", "default": 42, "min": 0, "max": 999999},
         },
     ),
     planned_iterations=planned_iterations,
