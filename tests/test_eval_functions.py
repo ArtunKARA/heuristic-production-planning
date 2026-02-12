@@ -46,6 +46,7 @@ def test_all_constraint_evaluators_trigger_expected_violations():
         "HARD_COMPAT_PRODUCT_MOLD",
         "HARD_CAPACITY_BUCKET",
         "HARD_CAPACITY_SEGMENT",
+        "HARD_MACHINE_TIME_OVERLAP",
     ]
     for code in expected_hard:
         assert hard.get(code, 0) > 0, f"{code} should be positive"

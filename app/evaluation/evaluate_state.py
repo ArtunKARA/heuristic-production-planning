@@ -67,12 +67,16 @@ def evaluate_state(state: Dict[str, Any], problemData: Dict[str, Any], scenarioC
     ctx = eval_core.build_evaluation_context(problem, st, scenario)
     res = eval_core.evaluate_constraints(ctx)
 
+    weights = (scenario or {}).get("weights", {}) or {}
+    hard_weight = float(weights.get("w_hard_penalty", 1.0))
+
     constraint_results: Dict[str, Dict[str, float]] = {}
-    # hard items -> violation, no penalty (only feasibility)
+    # hard items -> weighted penalty so UI can display hard impact
     for item in res["hard"]["items"]:
+        violation = float(item.get("value", 0.0))
         constraint_results[item["code"]] = {
-            "violation": float(item.get("value", 0.0)),
-            "penalty": 0.0,
+            "violation": violation,
+            "penalty": hard_weight * violation,
         }
 
     # soft terms -> penalty = cost, violation = value
@@ -86,8 +90,6 @@ def evaluate_state(state: Dict[str, Any], problemData: Dict[str, Any], scenarioC
 
     hard_total = float(res.get("hard", {}).get("total", 0.0))
     soft_total = float(res["soft"].get("total_cost", 0.0))
-    weights = (scenario or {}).get("weights", {}) or {}
-    hard_weight = float(weights.get("w_hard_penalty", 1.0))
     total_score = soft_total + (hard_weight * hard_total)
 
     return {

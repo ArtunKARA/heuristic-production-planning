@@ -82,3 +82,39 @@ def test_evaluate_state_runs_and_penalty_night_change():
         scenarioConfig=norm["scenarioConfig"],
     )
     assert res["constraint_results"]["SOFT_NIGHT_MOLD_CHANGE"]["violation"] >= 1
+
+
+@pytest.mark.api
+def test_evaluate_state_detects_machine_time_overlap():
+    raw = _load_raw()
+    norm = normalize_problem_frame(raw)
+
+    l1 = {
+        "lot_id": "OV1",
+        "product_code": "P1",
+        "process_code": "AP300",
+        "time_bucket_id": "CW43_25",
+        "qty": 1000,
+        "process_start_time": "2025-11-26T08:00:00",
+        "process_end_time": "2025-11-26T10:00:00",
+        "assigned_resources": {"machine": 12, "mold": "KLP_P1_01"},
+    }
+    l2 = {
+        "lot_id": "OV2",
+        "product_code": "P1",
+        "process_code": "AP300",
+        "time_bucket_id": "CW43_25",
+        "qty": 1000,
+        "process_start_time": "2025-11-26T09:00:00",
+        "process_end_time": "2025-11-26T11:00:00",
+        "assigned_resources": {"machine": 12, "mold": "KLP_P1_02"},
+    }
+
+    norm["state"]["lots"] = [l1, l2]
+
+    res = evaluate_state(
+        state=norm["state"],
+        problemData=norm["problemData"],
+        scenarioConfig=norm["scenarioConfig"],
+    )
+    assert res["constraint_results"]["HARD_MACHINE_TIME_OVERLAP"]["violation"] > 0

@@ -13,12 +13,18 @@ app.include_router(router)
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
+NO_CACHE_HEADERS = {
+    "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+    "Pragma": "no-cache",
+    "Expires": "0",
+}
+
 
 @app.get("/")
 def ui_root() -> FileResponse:
-    return FileResponse("app/static/index.html")
+    return FileResponse("app/static/index.html", headers=NO_CACHE_HEADERS)
 
 
 @app.get("/ui")
 def ui_alias() -> FileResponse:
-    return FileResponse("app/static/index.html")
+    return FileResponse("app/static/index.html", headers=NO_CACHE_HEADERS)

@@ -107,11 +107,18 @@ def _rebucket_lot(lot: Dict[str, Any], time_buckets: List[Dict[str, Any]], bucke
         if isinstance(new_start_date, str):
             new_start_date = datetime.fromisoformat(new_start_date).date()
         new_start = datetime.combine(new_start_date, start_dt.time())
+        delta = new_start - start_dt
         if end_time:
             end_dt = datetime.fromisoformat(end_time)
             dur = end_dt - start_dt
             lot["process_end_time"] = (new_start + dur).isoformat()
         lot["process_start_time"] = new_start.isoformat()
+        if lot.get("setup_start_time"):
+            setup_start_dt = datetime.fromisoformat(lot["setup_start_time"])
+            lot["setup_start_time"] = (setup_start_dt + delta).isoformat()
+        if lot.get("setup_end_time"):
+            setup_end_dt = datetime.fromisoformat(lot["setup_end_time"])
+            lot["setup_end_time"] = (setup_end_dt + delta).isoformat()
 
     lot["time_bucket_id"] = new_bucket_id
 

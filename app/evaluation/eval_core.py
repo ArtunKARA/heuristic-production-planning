@@ -262,6 +262,35 @@ def build_time_layer(ctx):
     tl["segment_of_datetime"] = segment_of_datetime
 
 
+def segment_constraints_at_datetime(tl, dt: datetime):
+    """
+    Return segment constraints for exact datetime using day schedules
+    (cross-midnight aware).
+    """
+    day_schedule_by_date = tl.get("day_schedule_by_date", {})
+    for day in (dt.date(), dt.date() - ONE_DAY):
+        ds = day_schedule_by_date.get(day)
+        if not ds or ds.get("is_holiday"):
+            continue
+        for seg in ds.get("segments", []):
+            if seg["start_datetime"] <= dt < seg["end_datetime"]:
+                return seg.get("constraint_codes", []) or []
+    return []
+
+
+def segment_constraints_for_day_code(tl, d, seg_code: str):
+    """
+    Return constraints for (date, segment_code) from work calendar schedule.
+    """
+    ds = tl.get("day_schedule_by_date", {}).get(d)
+    if not ds or ds.get("is_holiday"):
+        return []
+    for seg in ds.get("segments", []):
+        if seg.get("segment_code") == seg_code:
+            return seg.get("constraint_codes", []) or []
+    return []
+
+
 # ============================================================
 # 4) Process Layer (process -> resource roles)
 # ============================================================
@@ -881,6 +910,82 @@ def eval_hard_capacity_segment(ctx):
     return v_hours
 
 
+def _coerce_datetime(value):
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value)
+        except ValueError:
+            return None
+    return None
+
+
+def eval_hard_machine_time_overlap(ctx):
+    """
+    A machine cannot run more than one lot at the same timestamp.
+    Returns overlapping machine-hours (resource overload in time).
+    """
+    state = ctx["state"]
+
+    intervals_by_machine = {}
+    for lot in state.get("lots", []):
+        assigned = lot.get("assigned_resources", {}) or {}
+        machine_id = assigned.get("machine")
+        if not machine_id:
+            continue
+
+        start_dt = _coerce_datetime(lot.get("process_start_time"))
+        end_dt = _coerce_datetime(lot.get("process_end_time"))
+        if start_dt is None or end_dt is None or end_dt <= start_dt:
+            continue
+
+        intervals_by_machine.setdefault(machine_id, []).append((start_dt, end_dt))
+
+    overlap_hours = 0.0
+    for intervals in intervals_by_machine.values():
+        events = []
+        for start_dt, end_dt in intervals:
+            events.append((start_dt, 1))
+            events.append((end_dt, -1))
+
+        # For same timestamp, end events must be processed before start events.
+        events.sort(key=lambda item: (item[0], item[1]))
+
+        active = 0
+        prev_time = None
+        for timestamp, delta in events:
+            if prev_time is not None and timestamp > prev_time and active > 1:
+                dt_hours = (timestamp - prev_time).total_seconds() / 3600.0
+                overlap_hours += dt_hours * (active - 1)
+            active += delta
+            prev_time = timestamp
+
+    return overlap_hours
+
+
+def eval_hard_no_night_mold_setup(ctx, night_constraint_code="NO_MOLD_CHANGE_AT_NIGHT"):
+    """
+    If a lot has a mold assignment, setup start must not be in a segment
+    tagged with NO_MOLD_CHANGE_AT_NIGHT.
+    """
+    tl = ctx["time_layer"]
+    state = ctx["state"]
+    v = 0
+    for lot in state.get("lots", []):
+        assigned = lot.get("assigned_resources", {}) or {}
+        if not assigned.get("mold"):
+            continue
+
+        setup_start = lot.get("setup_start_time") or lot.get("process_start_time")
+        if not setup_start:
+            continue
+
+        if night_constraint_code in segment_constraints_at_datetime(tl, setup_start):
+            v += 1
+    return v
+
+
 # ---- Soft terms (objective components) ----
 
 def eval_soft_mold_change_total(ctx):
@@ -899,13 +1004,12 @@ def eval_soft_night_mold_change(ctx, night_constraint_code="NO_MOLD_CHANGE_AT_NI
     tl = ctx["time_layer"]
 
     ch = rl.get("changeovers", {}).get("machine", {}).get("mold", {})
-    seg_constraints = tl.get("segment_constraints_by_segment_code", {})
 
     v = 0
     for machine_id, by_date in ch.items():
         for d, by_seg in by_date.items():
             for seg_code, events in by_seg.items():
-                codes = seg_constraints.get(seg_code, [])
+                codes = segment_constraints_for_day_code(tl, d, seg_code)
                 if night_constraint_code in codes:
                     v += len(events)
     return v
@@ -961,6 +1065,8 @@ def evaluate_constraints(ctx):
     add_hard("HARD_COMPAT_PRODUCT_MOLD",          eval_hard_compat_product_mold(ctx), "count")
     add_hard("HARD_CAPACITY_BUCKET",              eval_hard_capacity_bucket(ctx), "hours")
     add_hard("HARD_CAPACITY_SEGMENT",             eval_hard_capacity_segment(ctx), "hours")
+    add_hard("HARD_MACHINE_TIME_OVERLAP",         eval_hard_machine_time_overlap(ctx), "hours")
+    add_hard("HARD_NO_NIGHT_MOLD_SETUP",          eval_hard_no_night_mold_setup(ctx), "count")
 
     hard_total = sum(float(it["value"]) for it in hard_items)
     feasible = (hard_total <= 0.0)
@@ -1022,6 +1128,8 @@ def example_scenario():
             "HARD_COMPAT_PRODUCT_MOLD": True,
             "HARD_CAPACITY_BUCKET": True,
             "HARD_CAPACITY_SEGMENT": True,
+            "HARD_MACHINE_TIME_OVERLAP": True,
+            "HARD_NO_NIGHT_MOLD_SETUP": True,
 
             # soft terms
             "SOFT_MOLD_CHANGE_MINIMIZE": True,
@@ -1150,6 +1258,22 @@ def build_constraint_catalog(ctx):
         evaluator_name="eval_hard_capacity_segment",
     )
 
+    add(
+        "HARD_MACHINE_TIME_OVERLAP",
+        kind="hard",
+        desc="Aynı makinede aynı anda birden fazla lot çalışamaz (çakışma saatleri)",
+        unit="hours",
+        origin="evaluator",
+        evaluator_name="eval_hard_machine_time_overlap",
+    )
+    add(
+        "HARD_NO_NIGHT_MOLD_SETUP",
+        kind="hard",
+        desc="Kalıp atanan lotlar için setup başlangıcı gece-kısıtlı segmentte olmamalı",
+        unit="count",
+        origin="evaluator",
+        evaluator_name="eval_hard_no_night_mold_setup",
+    )
     add(
         "SOFT_MOLD_CHANGE_MINIMIZE",
         kind="soft",

@@ -20,6 +20,8 @@ const HARD_TOGGLES = [
   "HARD_COMPAT_PRODUCT_MOLD",
   "HARD_CAPACITY_BUCKET",
   "HARD_CAPACITY_SEGMENT",
+  "HARD_MACHINE_TIME_OVERLAP",
+  "HARD_NO_NIGHT_MOLD_SETUP",
 ];
 
 const SOFT_TOGGLES = [
@@ -50,6 +52,8 @@ const HARD_DESC = {
   HARD_COMPAT_PRODUCT_MOLD: "Ürün ve kalıp eşleşmesi geçerli olmalı.",
   HARD_CAPACITY_BUCKET: "Bucket kapasitesi aşılmamalı.",
   HARD_CAPACITY_SEGMENT: "Vardiya segment kapasitesi aşılmamalı.",
+  HARD_MACHINE_TIME_OVERLAP: "Aynı makinede aynı anda birden fazla lot çalışamaz.",
+  HARD_NO_NIGHT_MOLD_SETUP: "Kalıp setup başlangıcı gece kısıtlı segmentte olmamalı.",
 };
 
 const SOFT_DESC = {
@@ -104,11 +108,22 @@ function showStep(stepNo) {
   }
 }
 
-function parseJsonInput() {
-  const raw = el("problem-json").value.trim();
-  if (!raw) return null;
+async function parseJsonInput() {
+  let raw = el("problem-json").value.trim();
+  if (!raw) {
+    const file = el("problem-file")?.files?.[0];
+    if (file) {
+      raw = (await file.text()).trim();
+      el("problem-json").value = raw;
+    }
+  }
+  if (!raw) {
+    setStatus("Problem JSON gir veya dosya sec", false);
+    return null;
+  }
   try {
-    return JSON.parse(raw);
+    const normalized = raw.replace(/^\uFEFF/, "");
+    return JSON.parse(normalized);
   } catch (e) {
     setStatus("JSON hatalı", false);
     throw e;
@@ -150,6 +165,60 @@ function buildWorkCalendar(timeBuckets, baseCode) {
     entries.push({ date: iso, shift_templates_code: baseCode, holiday: false });
   }
   return entries;
+}
+
+function estimateHardPenaltyWeight(problemData) {
+  if (!problemData) {
+    return DEFAULT_SCENARIO_WEIGHTS.w_hard_penalty;
+  }
+
+  let totalOrderQty = 0;
+  let orderCount = 0;
+  const orderGroups = Array.isArray(problemData.orders) ? problemData.orders : [];
+  for (const group of orderGroups) {
+    const orders = Array.isArray(group?.orders) ? group.orders : [];
+    orderCount += orders.length;
+    for (const order of orders) {
+      totalOrderQty += Number(order?.qty || 0);
+    }
+  }
+
+  const bucketCount = Array.isArray(problemData.time_buckets) ? problemData.time_buckets.length : 0;
+  const productCount = Array.isArray(problemData.products) ? problemData.products.length : 0;
+  const processCount = Array.isArray(problemData.processes) ? problemData.processes.length : 0;
+  const machineCount = Array.isArray(problemData?.resources?.machines)
+    ? problemData.resources.machines.length
+    : 0;
+
+  const demandScale = Math.log10(Math.max(10, totalOrderQty));
+  const structureScale = Math.sqrt(Math.max(1, orderCount))
+    + (bucketCount * 0.35)
+    + (productCount * 0.45)
+    + (processCount * 0.25)
+    + (machineCount * 0.08);
+
+  const raw = (35 * demandScale) + (12 * structureScale);
+  const clamped = Math.min(5000, Math.max(50, raw));
+  return Math.round(clamped / 5) * 5;
+}
+
+function applyAutoHardPenalty(problemData, force = false) {
+  const input = document.querySelector("#constraints input[data-weight='w_hard_penalty']");
+  if (!input) return null;
+
+  const recommended = estimateHardPenaltyWeight(problemData);
+  input.dataset.recommended = String(recommended);
+  input.title = `Onerilen sertlik: ${recommended}`;
+
+  const currentValue = Number(input.value);
+  const hasCurrentValue = Number.isFinite(currentValue) && currentValue > 0;
+  if (!force && (input.dataset.manual === "1" || hasCurrentValue)) {
+    return recommended;
+  }
+
+  input.value = String(recommended);
+  input.dataset.manual = "0";
+  return recommended;
 }
 
 function renderConstraints() {
@@ -197,7 +266,7 @@ function renderConstraints() {
         <label>${entry.label}</label>
         <span class="desc">Skor için hard ihlal ağırlığı (weight: ${entry.key})</span>
       </div>
-      <input type="number" step="0.1" value="${defaultWeight}" data-weight="${entry.key}" />
+      <input type="number" step="0.1" value="${defaultWeight}" data-weight="${entry.key}" data-manual="0" />
     `;
     container.appendChild(item);
   }
@@ -478,15 +547,26 @@ stepButtons.forEach((btn) => {
   });
 });
 
-el("btn-parse").addEventListener("click", () => {
+el("constraints").addEventListener("input", (event) => {
+  const target = event.target;
+  if (target && target.matches("input[data-weight='w_hard_penalty']")) {
+    target.dataset.manual = "1";
+  }
+});
+
+el("btn-parse").addEventListener("click", async () => {
   try {
-    const payload = parseJsonInput();
+    const payload = await parseJsonInput();
     if (!payload) return;
     state.problemData = normalizeProblem(payload);
     state.algorithmsLoaded = false;
     populateShiftTemplates(state.problemData);
     updateShiftInfo();
     updateProblemInfo(state.problemData);
+    const recommended = applyAutoHardPenalty(state.problemData);
+    if (recommended != null) {
+      el("problem-info").textContent += ` | Onerilen HARD_PENALTY_WEIGHT: ${recommended}`;
+    }
     setStatus("Problem yüklendi", true);
     showStep(2);
   } catch (e) {
