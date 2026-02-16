@@ -70,10 +70,17 @@ const ALGO_DESC = {
   gatabu: "GA sonrası tabu iyileştirmesi.",
   ga_tabu_inline: "GA içinde, jenerasyonlarda kısa tabu iyileştirmesi.",
   ga_tabu_topk: "GA sonrası en iyi K adayda tabu iyileştirmesi.",
+  hho: "Referans Harris Hawks Optimization (HHO) ile keşif/kuşatma tabanlı arama.",
 };
 
 const PARAM_DESC = {
   max_iter: "Maksimum iterasyon sayısı.",
+  hho_hawks: "HHO içerisindeki şahin (agent) sayısı.",
+  time_shift_max_hours: "HHO için azami zaman kaydırma büyüklüğü (saat).",
+  bucket_shift_max: "HHO için azami bucket kaydırma adımı.",
+  qty_jitter_max_pct: "HHO için lot miktarı azami jitter yüzdesi (0-1).",
+  machine_swap_max_rate: "HHO için azami makine swap oranı (0-1).",
+  mold_swap_max_rate: "HHO için azami kalıp swap oranı (0-1).",
   time_shift_hours: "Zaman kaydırma (saat).",
   bucket_shift: "Bucket kaydırma (index adımı).",
   bucket_shift_rate: "Bucket kaydırma uygulanma oranı (0-1).",

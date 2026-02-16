@@ -77,7 +77,7 @@ def list_algorithms(problem: Dict[str, Any] | None = None) -> List[Dict[str, Any
     has_molds = bool(molds and len(molds) > 1)
     algos = list_algorithm_specs()
     if not has_molds:
-        allowed = {"greedy", "ga", "tabu", "gatabu", "ga_tabu_inline", "ga_tabu_topk"}
+        allowed = {"greedy", "ga", "tabu", "gatabu", "ga_tabu_inline", "ga_tabu_topk", "hho"}
         algos = [a for a in algos if a["code"] in allowed]
     return algos
 

@@ -64,3 +64,28 @@ def test_optimize_endpoint_selects_best_candidate():
     # iteration payload should include full evaluation snapshot
     assert "evaluation" in body["iterations"][0]
     assert "constraint_results" in body["iterations"][0]["evaluation"]
+
+
+@pytest.mark.api
+def test_optimize_endpoint_supports_hho_strategy():
+    frame_payload = _load_frame_payload()
+    resp = API_CLIENT.post("/frame", json=frame_payload)
+    assert resp.status_code == 200
+    frame_id = resp.json()["id"]
+
+    resp2 = API_CLIENT.post(
+        f"/frame/{frame_id}/optimize",
+        json={
+            "strategy": "hho",
+            "max_iter": 3,
+            "hho_hawks": 4,
+            "mutation_seed": 7,
+        },
+    )
+    assert resp2.status_code == 200, resp2.text
+    body = resp2.json()
+
+    assert len(body.get("iterations", [])) == 4
+    assert body["iterations"][0]["progress"]["label"] in {"greedy", "state"}
+    assert body["iterations"][1]["progress"]["label"] == "hho-1"
+    assert "best_state" in body and "best_evaluation" in body

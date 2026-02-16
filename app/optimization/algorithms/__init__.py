@@ -9,6 +9,7 @@ from .tabu import ALGO as TABU
 from .gatabu import ALGO as GATABU
 from .ga_tabu_inline import ALGO as GA_TABU_INLINE
 from .ga_tabu_topk import ALGO as GA_TABU_TOPK
+from .hho import ALGO as HHO
 
 ALGORITHMS: Dict[str, Algorithm] = {
     GREEDY.spec.code: GREEDY,
@@ -17,6 +18,7 @@ ALGORITHMS: Dict[str, Algorithm] = {
     GATABU.spec.code: GATABU,
     GA_TABU_INLINE.spec.code: GA_TABU_INLINE,
     GA_TABU_TOPK.spec.code: GA_TABU_TOPK,
+    HHO.spec.code: HHO,
 }
 
 
