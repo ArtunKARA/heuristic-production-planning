@@ -89,3 +89,51 @@ def test_optimize_endpoint_supports_hho_strategy():
     assert body["iterations"][0]["progress"]["label"] in {"greedy", "state"}
     assert body["iterations"][1]["progress"]["label"] == "hho-1"
     assert "best_state" in body and "best_evaluation" in body
+
+
+@pytest.mark.api
+def test_optimize_endpoint_supports_hmpa_strategy():
+    frame_payload = _load_frame_payload()
+    resp = API_CLIENT.post("/frame", json=frame_payload)
+    assert resp.status_code == 200
+    frame_id = resp.json()["id"]
+
+    resp2 = API_CLIENT.post(
+        f"/frame/{frame_id}/optimize",
+        json={
+            "strategy": "hmpa",
+            "max_iter": 2,
+            "hmpa_predators": 4,
+            "mutation_seed": 11,
+        },
+    )
+    assert resp2.status_code == 200, resp2.text
+    body = resp2.json()
+
+    assert len(body.get("iterations", [])) == 3
+    assert body["iterations"][1]["progress"]["label"] == "hmpa-1"
+    assert "best_state" in body and "best_evaluation" in body
+
+
+@pytest.mark.api
+def test_optimize_endpoint_supports_cssrank_strategy():
+    frame_payload = _load_frame_payload()
+    resp = API_CLIENT.post("/frame", json=frame_payload)
+    assert resp.status_code == 200
+    frame_id = resp.json()["id"]
+
+    resp2 = API_CLIENT.post(
+        f"/frame/{frame_id}/optimize",
+        json={
+            "strategy": "cssrank",
+            "max_iter": 2,
+            "css_particles": 5,
+            "mutation_seed": 13,
+        },
+    )
+    assert resp2.status_code == 200, resp2.text
+    body = resp2.json()
+
+    assert len(body.get("iterations", [])) == 3
+    assert body["iterations"][1]["progress"]["label"] == "cssrank-1"
+    assert "best_state" in body and "best_evaluation" in body

@@ -77,7 +77,7 @@ def list_algorithms(problem: Dict[str, Any] | None = None) -> List[Dict[str, Any
     has_molds = bool(molds and len(molds) > 1)
     algos = list_algorithm_specs()
     if not has_molds:
-        allowed = {"greedy", "ga", "tabu", "gatabu", "ga_tabu_inline", "ga_tabu_topk", "hho"}
+        allowed = {"greedy", "ga", "tabu", "gatabu", "ga_tabu_inline", "ga_tabu_topk", "hho", "hmpa", "cssrank"}
         algos = [a for a in algos if a["code"] in allowed]
     return algos
 
@@ -93,6 +93,11 @@ def optimize_frame(
       - strategy: "ga"
       - strategy: "tabu"
       - strategy: "gatabu"
+      - strategy: "ga_tabu_inline"
+      - strategy: "ga_tabu_topk"
+      - strategy: "hho"
+      - strategy: "hmpa"
+      - strategy: "cssrank"
       - evaluate_state used for scoring.
       - Returns best plan + iteration log (iteration_no, feasible, cost, hard_total).
     """
