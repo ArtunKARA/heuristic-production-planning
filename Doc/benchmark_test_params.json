@@ -1,0 +1,90 @@
+{
+  "document": {
+    "name": "Benchmark Test Parameters",
+    "version": "1.0",
+    "language": "tr",
+    "description": "UI tarafinda girilen benchmark ayarlarini tek yerde tutan, koddan bagimsiz tanim dosyasi."
+  },
+  "api": {
+    "base_url": "http://127.0.0.1:8000",
+    "timeout_seconds": 180
+  },
+  "input_output": {
+    "input_file": "Doc/SampleData/example_input.json",
+    "output_dir": "Doc/api_benchmark_outputs"
+  },
+  "benchmark_plan": {
+    "run_name": "paper_comparison_main",
+    "resume": true,
+    "iteration_list": [10, 20, 30, 50, 100, 200],
+    "runs_per_iteration": 30,
+    "primary_metric": "total_score",
+    "seed_offset": 0,
+    "generate_plots": true,
+    "plot_dpi": 600,
+    "table_metrics": ["best", "mean", "worst", "std_dev"]
+  },
+  "algorithm_selection": {
+    "include_methods": [],
+    "exclude_methods": ["greedy"],
+    "notes": "include_methods bos ise sistemde mevcut tum algoritmalar kullanilir; exclude_methods her zaman filtre olarak uygulanir."
+  },
+  "parameters": {
+    "ui_global_parameters": {
+      "core": {
+        "max_iter": 50,
+        "mutation_seed": 42
+      },
+      "ga_and_hybrids": {
+        "population_size": 20,
+        "tabu_iter": 30,
+        "tabu_rate": 0.5,
+        "top_k": 5
+      },
+      "mutation_controls": {
+        "time_shift_hours": 0.0,
+        "bucket_shift": 1,
+        "bucket_shift_rate": 0.5,
+        "qty_jitter_pct": 0.05,
+        "qty_jitter_rate": 0.35,
+        "machine_swap_rate": 0.15,
+        "mold_swap_rate": 0.15
+      },
+      "hho": {
+        "hho_hawks": 12,
+        "time_shift_max_hours": 8.0,
+        "bucket_shift_max": 2,
+        "qty_jitter_max_pct": 0.2,
+        "machine_swap_max_rate": 0.5,
+        "mold_swap_max_rate": 0.5
+      },
+      "hmpa": {
+        "hmpa_predators": 12,
+        "local_trials": 3,
+        "local_search_every": 4,
+        "local_radius": 0.08,
+        "fads_rate": 0.15
+      },
+      "cssrank": {
+        "css_particles": 14,
+        "css_top_ratio": 0.4,
+        "css_damping": 0.72,
+        "css_accel": 1.25,
+        "css_elite_pull": 0.28,
+        "css_reset_rate": 0.12,
+        "css_noise_scale": 0.03
+      }
+    },
+    "common_request_overrides": {},
+    "method_specific_overrides": {
+      "ga": {},
+      "tabu": {},
+      "gatabu": {},
+      "ga_tabu_inline": {},
+      "ga_tabu_topk": {},
+      "hho": {},
+      "hmpa": {},
+      "cssrank": {}
+    }
+  }
+}
