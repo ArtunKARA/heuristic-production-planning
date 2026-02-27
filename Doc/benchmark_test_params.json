@@ -7,7 +7,7 @@
   },
   "api": {
     "base_url": "http://127.0.0.1:8000",
-    "timeout_seconds": 180
+    "timeout_seconds": 600
   },
   "input_output": {
     "input_file": "Doc/SampleData/example_input.json",
@@ -21,7 +21,7 @@
     "primary_metric": "total_score",
     "seed_offset": 0,
     "generate_plots": true,
-    "plot_dpi": 600,
+    "plot_dpi": 1000,
     "table_metrics": ["best", "mean", "worst", "std_dev"]
   },
   "algorithm_selection": {

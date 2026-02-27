@@ -20,7 +20,7 @@ def _mutate_mold(state: Dict[str, Any], alt_mold: str) -> Dict[str, Any]:
 
 
 def planned_iterations(payload: Dict[str, Any]) -> int:
-    max_iter = int(payload.get("tabu_iter") or payload.get("max_iter", 5))
+    max_iter = int(payload.get("max_iter", 5))
     return 1 + max_iter
 
 
@@ -44,7 +44,7 @@ def _tabu_search(
 
     cur_best_state = start_state
     cur_best_eval = start_eval
-    max_iter = int(max_iter_override if max_iter_override is not None else (ctx.payload.get("tabu_iter") or ctx.payload.get("max_iter", 5)))
+    max_iter = int(max_iter_override if max_iter_override is not None else ctx.payload.get("max_iter", 5))
     mutation_cfg = _mutation_config(ctx.payload)
     if "time_shift_hours" not in ctx.payload:
         mutation_cfg["time_shift_hours"] = 0.0

@@ -17,6 +17,7 @@ import json
 import statistics
 import sys
 import time
+import re
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
@@ -206,7 +207,14 @@ def _atomic_write_json(path: Path, payload: Dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp.replace(path)
+    for attempt in range(5):
+        try:
+            tmp.replace(path)
+            return
+        except PermissionError:
+            if attempt == 4:
+                raise
+            time.sleep(0.05 * (attempt + 1))
 
 
 def _append_jsonl(path: Path, payload: Dict[str, Any]) -> None:
@@ -541,6 +549,7 @@ def _generate_plots(
         files["warning"] = str(warning_path)
         return files
 
+
     plots_dir.mkdir(parents=True, exist_ok=True)
 
     # Combined metric-vs-N plot.
@@ -560,7 +569,7 @@ def _generate_plots(
             vals_sorted = sorted(vals, key=lambda x: x[0])
             x = [v[0] for v in vals_sorted]
             y = [v[1] for v in vals_sorted]
-            ax.plot(x, y, marker="o", label=method)
+            ax.plot(x, y, linewidth=1.5, label=method)
         ax.set_title(f"All Methods: {metric} vs N")
         ax.set_xlabel("N iteration")
         ax.set_ylabel(metric)
@@ -580,7 +589,7 @@ def _generate_plots(
             y_best = [v[2] for v in vals_sorted]
             y_worst = [v[3] for v in vals_sorted]
             fig, ax = plt.subplots(figsize=(8, 5))
-            ax.plot(x, y_mean, marker="o", label=f"{method} mean")
+            ax.plot(x, y_mean, linewidth=1.5, label=f"{method} mean")
             ax.fill_between(x, y_best, y_worst, alpha=0.2, label="best-worst band")
             ax.set_title(f"{method}: {metric} vs N")
             ax.set_xlabel("N iteration")
@@ -597,6 +606,10 @@ def _generate_plots(
     if convergence_rows:
         n_ref = max(_as_int(r.get("n_iter"), 0) for r in convergence_rows)
         ref_rows = [r for r in convergence_rows if _as_int(r.get("n_iter"), 0) == n_ref]
+
+        # -----------------------------
+        # (A) Evaluation-level convergence (x = iteration_no)
+        # -----------------------------
         grouped_conv: Dict[str, Dict[int, List[float]]] = defaultdict(lambda: defaultdict(list))
         for row in ref_rows:
             method = str(row.get("method", ""))
@@ -613,7 +626,7 @@ def _generate_plots(
             for method, by_iter in sorted(grouped_conv.items()):
                 x = sorted(by_iter.keys())
                 y = [statistics.fmean(by_iter[i]) for i in x]
-                ax.plot(x, y, label=method)
+                ax.plot(x, y, linewidth=1.5, label=method)
             ax.set_title(f"Combined Convergence at N={n_ref}")
             ax.set_xlabel("iteration_no")
             ax.set_ylabel(metric)
@@ -629,7 +642,7 @@ def _generate_plots(
                 x = sorted(by_iter.keys())
                 y = [statistics.fmean(by_iter[i]) for i in x]
                 fig, ax = plt.subplots(figsize=(8, 5))
-                ax.plot(x, y, label=method)
+                ax.plot(x, y, linewidth=1.5, label=method)
                 ax.set_title(f"{method} Convergence at N={n_ref}")
                 ax.set_xlabel("iteration_no")
                 ax.set_ylabel(metric)
@@ -641,7 +654,156 @@ def _generate_plots(
                 plt.close(fig)
                 files[f"{method}_convergence_n{n_ref}"] = str(p)
 
+
+        # -----------------------------
+        # (B) GA-primary outer-level convergence (x = GA generation)
+        # -----------------------------
+
+        _re_ga_gen = re.compile(r"^(?:ga|ga-inline|ga-topk)-(\d+)$")
+        _re_tabu_inline = re.compile(r"^tabu-inline-(\d+)-(\d+)$")
+        _re_tabu_topk = re.compile(r"^tabu-topk(\d+)-(\d+)$")   # topk-index, step
+        _re_tabu_g_topk = re.compile(r"^tabu-g(\d+)-topk(\d+)-(\d+)$")  # ga-gen, topk-index, step
+        _re_tabu_simple = re.compile(r"^tabu-(\d+)$")
+
+        def _outer_iter_from_row(row: Dict[str, Any]) -> int:
+            label = str(row.get("label", "") or "").strip()
+            iter_no = _as_int(row.get("iteration_no"), -1)
+            if label.lower() == "greedy":
+                return 0
+            # Two-level suffix: ...-X-Y  -> X
+            m = re.match(r".*-(\d+)-(\d+)$", label)
+            if m:
+                return int(m.group(1))
+            # One-level suffix: ...-X -> X
+            m = re.match(r".*-(\d+)$", label)
+            if m:
+                return int(m.group(1))
+            return iter_no if iter_no > 0 else 0
+
+        def _extract_ga_gen(label: str) -> int | None:
+            lab = (label or "").strip()
+            if lab.lower() == "greedy":
+                return 0
+            m = _re_ga_gen.match(lab)
+            if m:
+                return int(m.group(1))
+            m = _re_tabu_inline.match(lab)
+            if m:
+                return int(m.group(1))
+            m = _re_tabu_g_topk.match(lab)
+            if m:
+                return int(m.group(1))
+            return None
+
+
+        last_ga_gen: Dict[Tuple[str, int], int] = {}
+        for row in ref_rows:
+            method = str(row.get("method", ""))
+            run_no = _as_int(row.get("run"), 0)
+            if run_no <= 0:
+                continue
+            label = str(row.get("label", "") or "")
+            g = _extract_ga_gen(label)
+            if g is None:
+                continue
+            last_ga_gen[(method, run_no)] = max(last_ga_gen.get((method, run_no), 0), g)
+
+        best_by_run_gen: Dict[Tuple[str, int, int], float] = {}
+
+        from itertools import groupby
+
+        def _sort_key(r: Dict[str, Any]) -> Tuple[str, int, int]:
+            return (str(r.get("method", "")), _as_int(r.get("run"), 0), _as_int(r.get("iteration_no"), 0))
+
+        ref_rows_sorted = sorted(ref_rows, key=_sort_key)
+
+        for (method, run_no), rows_mr in groupby(ref_rows_sorted, key=lambda r: (str(r.get("method","")), _as_int(r.get("run"),0))):
+            if run_no <= 0:
+                continue
+            rows_mr = list(rows_mr)
+
+            is_ga_based = any(_re_ga_gen.match(str(r.get("label","") or "").strip()) for r in rows_mr)
+
+            current_gen: int | None = None
+            fallback_last = last_ga_gen.get((method, run_no))
+
+            for row in rows_mr:
+                val = _as_float(row.get("metric_value"))
+                if val is None:
+                    continue
+                label = str(row.get("label", "") or "").strip()
+
+                g = _extract_ga_gen(label)
+                if g is not None and g > 0:
+                    current_gen = g
+
+                if label.lower() == "greedy":
+                    continue  
+
+                if is_ga_based:
+                    m_inline = _re_tabu_inline.match(label)
+                    m_g_topk = _re_tabu_g_topk.match(label)
+                    m_topk   = _re_tabu_topk.match(label)
+                    m_simple = _re_tabu_simple.match(label)
+
+                    if m_inline:
+                        g_use = int(m_inline.group(1))
+                    elif m_g_topk:
+                        g_use = int(m_g_topk.group(1))
+                    elif m_topk or m_simple:
+                        g_use = current_gen if current_gen is not None else fallback_last
+                    else:
+                        g_use = current_gen
+
+                    if g_use is None or g_use <= 0:
+                        continue
+                else:
+                    g_use = _outer_iter_from_row(row)
+                    if g_use is None or g_use <= 0:
+                        continue
+
+                key = (method, run_no, int(g_use))
+                prev = best_by_run_gen.get(key)
+                best_by_run_gen[key] = val if prev is None else min(prev, val)
+        grouped_ga_primary: Dict[str, Dict[int, List[float]]] = defaultdict(lambda: defaultdict(list))
+        for (method, run_no, gen), best_val in best_by_run_gen.items():
+            grouped_ga_primary[method][gen].append(best_val)
+
+        if grouped_ga_primary:
+            fig, ax = plt.subplots(figsize=(9, 5))
+            for method, by_gen in sorted(grouped_ga_primary.items()):
+                x = sorted(by_gen.keys())
+                y = [statistics.fmean(by_gen[g]) for g in x]
+                ax.plot(x, y, linewidth=1.5, label=method)
+            ax.set_title(f"Combined GA-Primary Outer-Level Convergence at N={n_ref}")
+            ax.set_xlabel("outer_iter (GA generation; tabu steps folded into parent GA gen)")
+            ax.set_ylabel(metric)
+            ax.grid(True, alpha=0.3)
+            ax.legend()
+            combined_ga_primary_path = plots_dir / f"combined_outer_ga_primary_n{n_ref}.png"
+            fig.tight_layout()
+            fig.savefig(combined_ga_primary_path, dpi=dpi)
+            plt.close(fig)
+            files[f"combined_outer_ga_primary_n{n_ref}"] = str(combined_ga_primary_path)
+
+            for method, by_gen in sorted(grouped_ga_primary.items()):
+                x = sorted(by_gen.keys())
+                y = [statistics.fmean(by_gen[g]) for g in x]
+                fig, ax = plt.subplots(figsize=(8, 5))
+                ax.plot(x, y, linewidth=1.5, label=method)
+                ax.set_title(f"{method} GA-Primary Outer-Level Convergence at N={n_ref}")
+                ax.set_xlabel("outer_iter (GA generation for GA-based methods)")
+                ax.set_ylabel(metric)
+                ax.grid(True, alpha=0.3)
+                ax.legend()
+                p = plots_dir / f"{_slug(method)}_outer_ga_primary_n{n_ref}.png"
+                fig.tight_layout()
+                fig.savefig(p, dpi=dpi)
+                plt.close(fig)
+                files[f"{method}_outer_ga_primary_n{n_ref}"] = str(p)
+
     return files
+
 
 
 def _refresh_tables(
@@ -1047,6 +1209,8 @@ def run_api_benchmark(settings: Dict[str, Any]) -> Dict[str, Any]:
         optimize_payload["max_iter"] = n_iter
         optimize_payload["mutation_seed"] = seed
 
+        if method == "tabu":
+            optimize_payload.pop("tabu_iter", None)
         request_path = run_dir / "request.json"
         _atomic_write_json(
             request_path,
@@ -1157,11 +1321,13 @@ def run_api_benchmark(settings: Dict[str, Any]) -> Dict[str, Any]:
             "request_payload_json": _safe_json_dumps(optimize_payload),
         }
 
+        '''
         response_path = run_dir / "response.json"
         if status == "ok":
             _atomic_write_json(response_path, response)
         else:
             _atomic_write_json(response_path, {"error": error_msg})
+        '''
 
         _atomic_write_json(run_dir / "run_record.json", run_row)
         if convergence_rows:
