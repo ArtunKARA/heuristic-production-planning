@@ -111,3 +111,54 @@ def test_wide_metric_table():
     assert by_method["ga"]["n_20"] == 1.2
     assert by_method["hho"]["n_10"] == 0.9
 
+
+def test_outer_iter_from_label():
+    mod = _load_runner_module()
+    assert mod._outer_iter_from_label("greedy", 1) == 0
+    assert mod._outer_iter_from_label("state", 1) == 0
+    assert mod._outer_iter_from_label("ga-7", 3) == 7
+    assert mod._outer_iter_from_label("tabu-inline-5-2", 20) == 5
+    assert mod._outer_iter_from_label("unknown", 9) == 9
+
+
+def test_quality_feasibility_efficiency_rows():
+    mod = _load_runner_module()
+    by_n, by_method = mod._quality_feasibility_efficiency_rows(
+        [
+            {
+                "method": "ga",
+                "n_iter": 10,
+                "status": "ok",
+                "best_total_score": 100.0,
+                "best_total_cost": 60.0,
+                "best_hard_total": 0.0,
+                "eval_calls_total": 50,
+                "elapsed_sec": 10.0,
+            },
+            {
+                "method": "ga",
+                "n_iter": 10,
+                "status": "ok",
+                "best_total_score": 120.0,
+                "best_total_cost": 70.0,
+                "best_hard_total": 2.0,
+                "eval_calls_total": 60,
+                "elapsed_sec": 12.0,
+            },
+            {
+                "method": "ga",
+                "n_iter": 10,
+                "status": "error",
+                "best_total_score": 999.0,
+            },
+        ]
+    )
+    assert len(by_n) == 1
+    row = by_n[0]
+    assert row["method"] == "ga"
+    assert row["n_iter"] == 10
+    assert row["runs_ok"] == 2
+    assert row["feasible_rate"] == 0.5
+    assert row["median_best_hard_total"] == 1.0
+    assert len(by_method) == 1
+    assert by_method[0]["method"] == "ga"

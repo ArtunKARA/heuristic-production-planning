@@ -50,15 +50,22 @@ RUN_RESULTS_FIELDS = [
     "job_key",
     "method",
     "n_iter",
+    "run_id",
     "run",
     "seed",
     "metric",
     "metric_value",
     "feasible",
+    "feasible_best",
+    "best_total_score",
+    "best_total_cost",
+    "best_hard_total",
     "total_score",
     "total_cost",
     "hard_total",
     "iteration_count",
+    "eval_calls_total",
+    "eval_per_sec",
     "elapsed_sec",
     "status",
     "error",
@@ -72,12 +79,22 @@ CONVERGENCE_FIELDS = [
     "job_key",
     "method",
     "n_iter",
+    "run_id",
     "run",
     "seed",
+    "outer_iter",
     "iteration_no",
     "label",
+    "eval_calls_total",
     "metric",
     "metric_value",
+    "best_so_far_metric_value",
+    "current_total_score",
+    "best_so_far_total_score",
+    "current_total_cost",
+    "best_so_far_total_cost",
+    "current_hard_total",
+    "best_so_far_hard_total",
     "total_score",
     "total_cost",
     "hard_total",
@@ -116,6 +133,51 @@ SUMMARY_BY_METHOD_FIELDS = [
     "mean",
     "worst",
     "std_dev",
+]
+
+FAIRNESS_BY_METHOD_N_FIELDS = [
+    "method",
+    "n_iter",
+    "runs_ok",
+    "feasible_rate",
+    "median_best_hard_total",
+    "mean_best_total_score",
+    "std_best_total_score",
+    "mean_best_total_cost",
+    "std_best_total_cost",
+    "mean_eval_calls_total",
+    "std_eval_calls_total",
+    "mean_elapsed_sec",
+    "std_elapsed_sec",
+]
+
+FAIRNESS_BY_METHOD_FIELDS = [
+    "method",
+    "runs_ok",
+    "feasible_rate",
+    "median_best_hard_total",
+    "mean_best_total_score",
+    "std_best_total_score",
+    "mean_best_total_cost",
+    "std_best_total_cost",
+    "mean_eval_calls_total",
+    "std_eval_calls_total",
+    "mean_elapsed_sec",
+    "std_elapsed_sec",
+]
+
+FE_BUDGET_FIELDS = [
+    "method",
+    "n_iter",
+    "fe_budget",
+    "runs_reached_budget",
+    "mean_best_so_far_total_score",
+    "std_best_so_far_total_score",
+    "mean_best_so_far_total_cost",
+    "std_best_so_far_total_cost",
+    "mean_best_so_far_hard_total",
+    "median_best_so_far_hard_total",
+    "feasible_rate_at_budget",
 ]
 
 
@@ -178,6 +240,55 @@ def _as_int(value: Any, default: int) -> int:
 
 def _as_dict(value: Any) -> Dict[str, Any]:
     return value if isinstance(value, dict) else {}
+
+
+def _as_bool(value: Any) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in {"1", "true", "yes", "y", "on"}:
+            return True
+        if lowered in {"0", "false", "no", "n", "off"}:
+            return False
+    return None
+
+
+def _hard_total_from_eval(eval_res: Dict[str, Any]) -> float | None:
+    hard_direct = _as_float(eval_res.get("hard_total"))
+    if hard_direct is not None:
+        return hard_direct
+    cr = eval_res.get("constraint_results")
+    if not isinstance(cr, dict):
+        return None
+    total = 0.0
+    has_any = False
+    for code, node in cr.items():
+        if not str(code).startswith("HARD_"):
+            continue
+        if not isinstance(node, dict):
+            continue
+        val = _as_float(node.get("violation"))
+        if val is None:
+            continue
+        total += val
+        has_any = True
+    return total if has_any else None
+
+
+def _outer_iter_from_label(label: str, iteration_no: int) -> int:
+    lab = (label or "").strip()
+    if lab.lower() in {"", "greedy", "state"}:
+        return 0
+    m = re.match(r".*-(\d+)-(\d+)$", lab)
+    if m:
+        return int(m.group(1))
+    m = re.match(r".*-(\d+)$", lab)
+    if m:
+        return int(m.group(1))
+    return iteration_no if iteration_no > 0 else 0
 
 
 def _first_not_none(*values: Any, default: Any = None) -> Any:
@@ -366,7 +477,8 @@ def _job_key(method: str, n_iter: int, run_idx: int) -> str:
 def _job_key_from_row(row: Dict[str, Any]) -> str:
     if row.get("job_key"):
         return str(row["job_key"])
-    return _job_key(str(row.get("method", "")), _as_int(row.get("n_iter"), 0), _as_int(row.get("run"), 0))
+    run_idx = _as_int(_first_not_none(row.get("run"), row.get("run_id")), 0)
+    return _job_key(str(row.get("method", "")), _as_int(row.get("n_iter"), 0), run_idx)
 
 
 def _job_run_dir(root: Path, method: str, n_iter: int, run_idx: int) -> Path:
@@ -529,6 +641,7 @@ def _generate_plots(
     *,
     summary_rows: List[Dict[str, Any]],
     convergence_rows: List[Dict[str, Any]],
+    run_rows: List[Dict[str, Any]],
     metric: str,
     plots_dir: Path,
     dpi: int,
@@ -551,6 +664,59 @@ def _generate_plots(
 
 
     plots_dir.mkdir(parents=True, exist_ok=True)
+
+    def _group_best_series(rows: List[Dict[str, Any]], value_field: str) -> Dict[str, List[List[Tuple[int, float]]]]:
+        grouped: Dict[str, Dict[int, List[Tuple[int, float]]]] = defaultdict(lambda: defaultdict(list))
+        for row in rows:
+            method = str(row.get("method", ""))
+            run_no = _as_int(_first_not_none(row.get("run"), row.get("run_id")), 0)
+            fe = _as_int(row.get("eval_calls_total"), 0)
+            value = _as_float(row.get(value_field))
+            if not method or run_no <= 0 or fe <= 0 or value is None:
+                continue
+            grouped[method][run_no].append((fe, value))
+
+        out: Dict[str, List[List[Tuple[int, float]]]] = {}
+        for method, by_run in grouped.items():
+            out[method] = []
+            for run_no in sorted(by_run.keys()):
+                points = sorted(by_run[run_no], key=lambda p: p[0])
+                if not points:
+                    continue
+                dedup: List[Tuple[int, float]] = []
+                for fe, val in points:
+                    if dedup and dedup[-1][0] == fe:
+                        dedup[-1] = (fe, min(dedup[-1][1], val))
+                    else:
+                        dedup.append((fe, val))
+                out[method].append(dedup)
+        return out
+
+    def _step_value_at_or_before(points: List[Tuple[int, float]], budget: int) -> float | None:
+        current = None
+        for fe, val in points:
+            if fe > budget:
+                break
+            current = val
+        return current
+
+    def _aggregate_step_series(runs: List[List[Tuple[int, float]]]) -> Tuple[List[int], List[float], List[float]]:
+        x_axis = sorted({fe for points in runs for fe, _ in points})
+        means: List[float] = []
+        stds: List[float] = []
+        xs: List[int] = []
+        for fe in x_axis:
+            vals: List[float] = []
+            for points in runs:
+                v = _step_value_at_or_before(points, fe)
+                if v is not None:
+                    vals.append(v)
+            if not vals:
+                continue
+            xs.append(fe)
+            means.append(statistics.fmean(vals))
+            stds.append(statistics.pstdev(vals) if len(vals) > 1 else 0.0)
+        return xs, means, stds
 
     # Combined metric-vs-N plot.
     grouped_summary: Dict[str, List[Tuple[int, float, float, float]]] = defaultdict(list)
@@ -606,6 +772,135 @@ def _generate_plots(
     if convergence_rows:
         n_ref = max(_as_int(r.get("n_iter"), 0) for r in convergence_rows)
         ref_rows = [r for r in convergence_rows if _as_int(r.get("n_iter"), 0) == n_ref]
+
+        # -----------------------------
+        # (0) FE-budget figures (best-so-far)
+        # -----------------------------
+        score_series = _group_best_series(ref_rows, "best_so_far_total_score")
+        if score_series:
+            fig, ax = plt.subplots(figsize=(9, 5))
+            for method, runs in sorted(score_series.items()):
+                x, y, y_std = _aggregate_step_series(runs)
+                if not x:
+                    continue
+                y_lo = [m - s for m, s in zip(y, y_std)]
+                y_hi = [m + s for m, s in zip(y, y_std)]
+                ax.plot(x, y, linewidth=1.5, label=method)
+                ax.fill_between(x, y_lo, y_hi, alpha=0.15)
+            ax.set_title(f"Best-so-far total_score vs FE at N={n_ref}")
+            ax.set_xlabel("eval_calls_total (FE)")
+            ax.set_ylabel("best_so_far_total_score")
+            ax.grid(True, alpha=0.3)
+            ax.legend()
+            p = plots_dir / f"combined_best_so_far_score_vs_fe_n{n_ref}.png"
+            fig.tight_layout()
+            fig.savefig(p, dpi=dpi)
+            plt.close(fig)
+            files[f"combined_best_so_far_score_vs_fe_n{n_ref}"] = str(p)
+
+            # Final score distribution at a fixed FE budget (boxplot).
+            min_common_fe_by_method: List[int] = []
+            for method, runs in score_series.items():
+                max_fe_per_run = [max(fe for fe, _ in points) for points in runs if points]
+                if not max_fe_per_run:
+                    continue
+                min_common_fe_by_method.append(min(max_fe_per_run))
+            global_common_fe = min(min_common_fe_by_method) if min_common_fe_by_method else 0
+            if global_common_fe > 0:
+                candidate_budgets = [1000, 5000, 10000]
+                budget = max([b for b in candidate_budgets if b <= global_common_fe], default=global_common_fe)
+                labels: List[str] = []
+                data: List[List[float]] = []
+                for method, runs in sorted(score_series.items()):
+                    vals = []
+                    for points in runs:
+                        v = _step_value_at_or_before(points, budget)
+                        if v is not None:
+                            vals.append(v)
+                    if vals:
+                        labels.append(method)
+                        data.append(vals)
+                if data:
+                    fig, ax = plt.subplots(figsize=(10, 5))
+                    ax.boxplot(data, labels=labels, showmeans=True)
+                    ax.set_title(f"Final best-so-far total_score distribution @FE={budget} (N={n_ref})")
+                    ax.set_xlabel("method")
+                    ax.set_ylabel("best_so_far_total_score")
+                    ax.grid(True, axis="y", alpha=0.3)
+                    p = plots_dir / f"boxplot_best_so_far_score_fe{budget}_n{n_ref}.png"
+                    fig.tight_layout()
+                    fig.savefig(p, dpi=dpi)
+                    plt.close(fig)
+                    files[f"boxplot_best_so_far_score_fe{budget}_n{n_ref}"] = str(p)
+
+        hard_series = _group_best_series(ref_rows, "best_so_far_hard_total")
+        if hard_series:
+            fig, ax = plt.subplots(figsize=(9, 5))
+            for method, runs in sorted(hard_series.items()):
+                x, y, y_std = _aggregate_step_series(runs)
+                if not x:
+                    continue
+                y_lo = [m - s for m, s in zip(y, y_std)]
+                y_hi = [m + s for m, s in zip(y, y_std)]
+                ax.plot(x, y, linewidth=1.5, label=method)
+                ax.fill_between(x, y_lo, y_hi, alpha=0.15)
+            ax.set_title(f"Best-so-far hard_total vs FE at N={n_ref}")
+            ax.set_xlabel("eval_calls_total (FE)")
+            ax.set_ylabel("best_so_far_hard_total")
+            ax.grid(True, alpha=0.3)
+            ax.legend()
+            p = plots_dir / f"combined_best_so_far_hard_vs_fe_n{n_ref}.png"
+            fig.tight_layout()
+            fig.savefig(p, dpi=dpi)
+            plt.close(fig)
+            files[f"combined_best_so_far_hard_vs_fe_n{n_ref}"] = str(p)
+
+        # Pareto (elapsed_sec vs final best_total_score) at max N.
+        pareto_rows = [
+            r
+            for r in run_rows
+            if str(r.get("status", "")).lower() == "ok" and _as_int(r.get("n_iter"), 0) == n_ref
+        ]
+        if pareto_rows:
+            per_method: Dict[str, Dict[str, List[float]]] = defaultdict(lambda: {"x": [], "y": []})
+            for row in pareto_rows:
+                method = str(row.get("method", ""))
+                x = _as_float(row.get("elapsed_sec"))
+                y = _as_float(_first_not_none(row.get("best_total_score"), row.get("total_score")))
+                if not method or x is None or y is None:
+                    continue
+                per_method[method]["x"].append(x)
+                per_method[method]["y"].append(y)
+            if per_method:
+                fig, ax = plt.subplots(figsize=(9, 5))
+                for method, vals in sorted(per_method.items()):
+                    x_vals = vals["x"]
+                    y_vals = vals["y"]
+                    if not x_vals or not y_vals:
+                        continue
+                    x_mean = statistics.fmean(x_vals)
+                    y_mean = statistics.fmean(y_vals)
+                    x_std = statistics.pstdev(x_vals) if len(x_vals) > 1 else 0.0
+                    y_std = statistics.pstdev(y_vals) if len(y_vals) > 1 else 0.0
+                    ax.errorbar(
+                        x_mean,
+                        y_mean,
+                        xerr=x_std,
+                        yerr=y_std,
+                        fmt="o",
+                        capsize=4,
+                        label=method,
+                    )
+                ax.set_title(f"Pareto at N={n_ref} (elapsed_sec vs final best_total_score)")
+                ax.set_xlabel("elapsed_sec")
+                ax.set_ylabel("best_total_score")
+                ax.grid(True, alpha=0.3)
+                ax.legend()
+                p = plots_dir / f"pareto_elapsed_vs_score_n{n_ref}.png"
+                fig.tight_layout()
+                fig.savefig(p, dpi=dpi)
+                plt.close(fig)
+                files[f"pareto_elapsed_vs_score_n{n_ref}"] = str(p)
 
         # -----------------------------
         # (A) Evaluation-level convergence (x = iteration_no)
@@ -666,19 +961,10 @@ def _generate_plots(
         _re_tabu_simple = re.compile(r"^tabu-(\d+)$")
 
         def _outer_iter_from_row(row: Dict[str, Any]) -> int:
-            label = str(row.get("label", "") or "").strip()
-            iter_no = _as_int(row.get("iteration_no"), -1)
-            if label.lower() == "greedy":
-                return 0
-            # Two-level suffix: ...-X-Y  -> X
-            m = re.match(r".*-(\d+)-(\d+)$", label)
-            if m:
-                return int(m.group(1))
-            # One-level suffix: ...-X -> X
-            m = re.match(r".*-(\d+)$", label)
-            if m:
-                return int(m.group(1))
-            return iter_no if iter_no > 0 else 0
+            return _outer_iter_from_label(
+                str(row.get("label", "") or "").strip(),
+                _as_int(row.get("iteration_no"), -1),
+            )
 
         def _extract_ga_gen(label: str) -> int | None:
             lab = (label or "").strip()
@@ -699,7 +985,7 @@ def _generate_plots(
         last_ga_gen: Dict[Tuple[str, int], int] = {}
         for row in ref_rows:
             method = str(row.get("method", ""))
-            run_no = _as_int(row.get("run"), 0)
+            run_no = _as_int(_first_not_none(row.get("run"), row.get("run_id")), 0)
             if run_no <= 0:
                 continue
             label = str(row.get("label", "") or "")
@@ -713,11 +999,21 @@ def _generate_plots(
         from itertools import groupby
 
         def _sort_key(r: Dict[str, Any]) -> Tuple[str, int, int]:
-            return (str(r.get("method", "")), _as_int(r.get("run"), 0), _as_int(r.get("iteration_no"), 0))
+            return (
+                str(r.get("method", "")),
+                _as_int(_first_not_none(r.get("run"), r.get("run_id")), 0),
+                _as_int(r.get("iteration_no"), 0),
+            )
 
         ref_rows_sorted = sorted(ref_rows, key=_sort_key)
 
-        for (method, run_no), rows_mr in groupby(ref_rows_sorted, key=lambda r: (str(r.get("method","")), _as_int(r.get("run"),0))):
+        for (method, run_no), rows_mr in groupby(
+            ref_rows_sorted,
+            key=lambda r: (
+                str(r.get("method", "")),
+                _as_int(_first_not_none(r.get("run"), r.get("run_id")), 0),
+            ),
+        ):
             if run_no <= 0:
                 continue
             rows_mr = list(rows_mr)
@@ -832,6 +1128,237 @@ def _refresh_tables(
         path = csv_dir / f"table_{metric_field}_matrix.csv"
         _write_csv(path, rows, fn)
         files[f"table_{metric_field}_matrix"] = str(path)
+
+    return files
+
+
+def _quality_feasibility_efficiency_rows(run_rows: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    grouped: Dict[Tuple[str, int], List[Dict[str, Any]]] = defaultdict(list)
+    for row in run_rows:
+        if str(row.get("status", "")).lower() != "ok":
+            continue
+        method = str(row.get("method", ""))
+        n_iter = _as_int(row.get("n_iter"), 0)
+        grouped[(method, n_iter)].append(row)
+
+    def _build_summary(rows_in_group: List[Dict[str, Any]]) -> Dict[str, Any]:
+        score_vals: List[float] = []
+        cost_vals: List[float] = []
+        hard_vals: List[float] = []
+        eval_vals: List[float] = []
+        elapsed_vals: List[float] = []
+        feasible_hits = 0
+
+        for row in rows_in_group:
+            score = _as_float(_first_not_none(row.get("best_total_score"), row.get("total_score")))
+            cost = _as_float(_first_not_none(row.get("best_total_cost"), row.get("total_cost")))
+            hard = _as_float(_first_not_none(row.get("best_hard_total"), row.get("hard_total")))
+            eval_calls = _as_float(row.get("eval_calls_total"))
+            elapsed = _as_float(row.get("elapsed_sec"))
+
+            if score is not None:
+                score_vals.append(score)
+            if cost is not None:
+                cost_vals.append(cost)
+            if hard is not None:
+                hard_vals.append(hard)
+            if eval_calls is not None:
+                eval_vals.append(eval_calls)
+            if elapsed is not None:
+                elapsed_vals.append(elapsed)
+
+            feasible_best = _as_bool(row.get("feasible_best"))
+            if feasible_best is None:
+                feasible_best = _as_bool(row.get("feasible"))
+            if feasible_best is None and hard is not None:
+                feasible_best = hard == 0.0
+            if feasible_best:
+                feasible_hits += 1
+
+        runs_ok = len(rows_in_group)
+        return {
+            "runs_ok": runs_ok,
+            "feasible_rate": (feasible_hits / runs_ok) if runs_ok else "",
+            "median_best_hard_total": statistics.median(hard_vals) if hard_vals else "",
+            "mean_best_total_score": statistics.fmean(score_vals) if score_vals else "",
+            "std_best_total_score": statistics.pstdev(score_vals) if len(score_vals) > 1 else (0.0 if score_vals else ""),
+            "mean_best_total_cost": statistics.fmean(cost_vals) if cost_vals else "",
+            "std_best_total_cost": statistics.pstdev(cost_vals) if len(cost_vals) > 1 else (0.0 if cost_vals else ""),
+            "mean_eval_calls_total": statistics.fmean(eval_vals) if eval_vals else "",
+            "std_eval_calls_total": statistics.pstdev(eval_vals) if len(eval_vals) > 1 else (0.0 if eval_vals else ""),
+            "mean_elapsed_sec": statistics.fmean(elapsed_vals) if elapsed_vals else "",
+            "std_elapsed_sec": statistics.pstdev(elapsed_vals) if len(elapsed_vals) > 1 else (0.0 if elapsed_vals else ""),
+        }
+
+    by_method_n: List[Dict[str, Any]] = []
+    for (method, n_iter), rows_in_group in sorted(grouped.items(), key=lambda kv: (kv[0][0], kv[0][1])):
+        summary = _build_summary(rows_in_group)
+        by_method_n.append(
+            {
+                "method": method,
+                "n_iter": n_iter,
+                **summary,
+            }
+        )
+
+    grouped_method: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    for row in by_method_n:
+        grouped_method[str(row.get("method", ""))].append(row)
+
+    by_method: List[Dict[str, Any]] = []
+    for method in sorted(grouped_method.keys()):
+        rows_for_method = []
+        for row in run_rows:
+            if str(row.get("status", "")).lower() != "ok":
+                continue
+            if str(row.get("method", "")) != method:
+                continue
+            rows_for_method.append(row)
+        summary = _build_summary(rows_for_method)
+        by_method.append({"method": method, **summary})
+
+    return by_method_n, by_method
+
+
+def _fe_budget_rows(convergence_rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    grouped: Dict[Tuple[str, int, int], List[Tuple[int, float | None, float | None, float | None]]] = defaultdict(list)
+    for row in convergence_rows:
+        method = str(row.get("method", ""))
+        n_iter = _as_int(row.get("n_iter"), 0)
+        run_no = _as_int(_first_not_none(row.get("run"), row.get("run_id")), 0)
+        fe = _as_int(row.get("eval_calls_total"), 0)
+        if not method or n_iter <= 0 or run_no <= 0 or fe <= 0:
+            continue
+        score = _as_float(_first_not_none(row.get("best_so_far_total_score"), row.get("current_total_score"), row.get("total_score")))
+        cost = _as_float(_first_not_none(row.get("best_so_far_total_cost"), row.get("current_total_cost"), row.get("total_cost")))
+        hard = _as_float(_first_not_none(row.get("best_so_far_hard_total"), row.get("current_hard_total"), row.get("hard_total")))
+        grouped[(method, n_iter, run_no)].append((fe, score, cost, hard))
+
+    dedup_series: Dict[Tuple[str, int, int], List[Tuple[int, float | None, float | None, float | None]]] = {}
+    for key, points in grouped.items():
+        ordered = sorted(points, key=lambda x: x[0])
+        dedup: List[Tuple[int, float | None, float | None, float | None]] = []
+        for fe, score, cost, hard in ordered:
+            if dedup and dedup[-1][0] == fe:
+                prev_fe, prev_score, prev_cost, prev_hard = dedup[-1]
+                dedup[-1] = (
+                    prev_fe,
+                    min(prev_score, score) if (prev_score is not None and score is not None) else _first_not_none(score, prev_score),
+                    min(prev_cost, cost) if (prev_cost is not None and cost is not None) else _first_not_none(cost, prev_cost),
+                    min(prev_hard, hard) if (prev_hard is not None and hard is not None) else _first_not_none(hard, prev_hard),
+                )
+            else:
+                dedup.append((fe, score, cost, hard))
+        dedup_series[key] = dedup
+
+    methods_by_n: Dict[int, Dict[str, List[int]]] = defaultdict(lambda: defaultdict(list))
+    for (method, n_iter, _run_no), points in dedup_series.items():
+        if points:
+            methods_by_n[n_iter][method].append(points[-1][0])
+
+    rows_out: List[Dict[str, Any]] = []
+    candidate_budgets = [500, 1000, 5000, 10000]
+
+    for n_iter in sorted(methods_by_n.keys()):
+        method_caps: List[int] = []
+        for method in methods_by_n[n_iter]:
+            run_caps = methods_by_n[n_iter][method]
+            if run_caps:
+                method_caps.append(min(run_caps))
+        if not method_caps:
+            continue
+        global_common = min(method_caps)
+        budgets = [b for b in candidate_budgets if b <= global_common]
+        if global_common > 0 and global_common not in budgets:
+            budgets.append(global_common)
+        budgets = sorted(set(budgets))
+        if not budgets:
+            continue
+
+        for method in sorted(methods_by_n[n_iter].keys()):
+            series_for_method = [
+                points
+                for (m, n, _r), points in dedup_series.items()
+                if m == method and n == n_iter and points
+            ]
+            if not series_for_method:
+                continue
+
+            for budget in budgets:
+                score_vals: List[float] = []
+                cost_vals: List[float] = []
+                hard_vals: List[float] = []
+                feasible_hits = 0
+                runs_reached = 0
+
+                for points in series_for_method:
+                    last_score = None
+                    last_cost = None
+                    last_hard = None
+                    for fe, score, cost, hard in points:
+                        if fe > budget:
+                            break
+                        last_score = score
+                        last_cost = cost
+                        last_hard = hard
+                    if last_score is None and last_cost is None and last_hard is None:
+                        continue
+                    runs_reached += 1
+                    if last_score is not None:
+                        score_vals.append(last_score)
+                    if last_cost is not None:
+                        cost_vals.append(last_cost)
+                    if last_hard is not None:
+                        hard_vals.append(last_hard)
+                        if last_hard == 0.0:
+                            feasible_hits += 1
+
+                if runs_reached <= 0:
+                    continue
+
+                rows_out.append(
+                    {
+                        "method": method,
+                        "n_iter": n_iter,
+                        "fe_budget": budget,
+                        "runs_reached_budget": runs_reached,
+                        "mean_best_so_far_total_score": statistics.fmean(score_vals) if score_vals else "",
+                        "std_best_so_far_total_score": (
+                            statistics.pstdev(score_vals) if len(score_vals) > 1 else (0.0 if score_vals else "")
+                        ),
+                        "mean_best_so_far_total_cost": statistics.fmean(cost_vals) if cost_vals else "",
+                        "std_best_so_far_total_cost": (
+                            statistics.pstdev(cost_vals) if len(cost_vals) > 1 else (0.0 if cost_vals else "")
+                        ),
+                        "mean_best_so_far_hard_total": statistics.fmean(hard_vals) if hard_vals else "",
+                        "median_best_so_far_hard_total": statistics.median(hard_vals) if hard_vals else "",
+                        "feasible_rate_at_budget": (feasible_hits / runs_reached) if runs_reached else "",
+                    }
+                )
+
+    return rows_out
+
+
+def _refresh_fairness_tables(
+    *,
+    run_rows: List[Dict[str, Any]],
+    convergence_rows: List[Dict[str, Any]],
+    csv_dir: Path,
+) -> Dict[str, str]:
+    files: Dict[str, str] = {}
+
+    fair_n, fair_m = _quality_feasibility_efficiency_rows(run_rows)
+    fair_n_path = csv_dir / "fairness_by_method_n.csv"
+    fair_m_path = csv_dir / "fairness_by_method.csv"
+    _write_csv(fair_n_path, fair_n, FAIRNESS_BY_METHOD_N_FIELDS)
+    _write_csv(fair_m_path, fair_m, FAIRNESS_BY_METHOD_FIELDS)
+    files["fairness_by_method_n"] = str(fair_n_path)
+    files["fairness_by_method"] = str(fair_m_path)
+
+    fe_budget_rows = _fe_budget_rows(convergence_rows)
+    fe_budget_path = csv_dir / "fe_budget_summary.csv"
+    _write_csv(fe_budget_path, fe_budget_rows, FE_BUDGET_FIELDS)
+    files["fe_budget_summary"] = str(fe_budget_path)
 
     return files
 
@@ -1260,58 +1787,136 @@ def run_api_benchmark(settings: Dict[str, Any]) -> Dict[str, Any]:
 
         metric_value = None
         feasible = None
+        feasible_best = None
+        best_total_score = None
+        best_total_cost = None
+        best_hard_total = None
         total_cost = None
         total_score = None
         hard_total = None
         best_eval: Dict[str, Any] = {}
         iteration_count = 0
+        eval_calls_total = 0
+        eval_per_sec = None
         convergence_rows: List[Dict[str, Any]] = []
 
         if status == "ok":
             metric_value, best_eval = _extract_best_metrics(response, metric)
-            feasible = best_eval.get("feasible")
-            total_cost = _as_float(best_eval.get("total_cost"))
-            total_score = _as_float(best_eval.get("total_score"))
-            hard_total = _as_float(best_eval.get("hard_total"))
+            best_total_cost = _as_float(best_eval.get("total_cost"))
+            best_total_score = _as_float(best_eval.get("total_score"))
+            best_hard_total = _hard_total_from_eval(best_eval)
+
+            feasible_best = best_eval.get("feasible")
+            if feasible_best is None and best_hard_total is not None:
+                feasible_best = bool(best_hard_total == 0.0)
+            elif best_hard_total is not None and best_hard_total == 0.0:
+                feasible_best = True
+
+            feasible = _first_not_none(best_eval.get("feasible"), feasible_best)
+            total_cost = best_total_cost
+            total_score = best_total_score
+            hard_total = best_hard_total
+            eval_calls_total = max(0, _as_int(response.get("eval_calls_total"), 0))
+
             iterations_data = response.get("iterations")
             if isinstance(iterations_data, list):
                 iteration_count = len(iterations_data)
+                best_so_far_metric = None
+                best_so_far_score = None
+                best_so_far_cost = None
+                best_so_far_hard = None
+                prev_eval_calls = 0
                 for iter_item in iterations_data:
                     if not isinstance(iter_item, dict):
                         continue
+                    label = (
+                        (iter_item.get("progress") or {}).get("label")
+                        if isinstance(iter_item.get("progress"), dict)
+                        else ""
+                    )
+                    iter_no = _as_int(iter_item.get("iteration_no"), 0)
+                    current_metric = _extract_metric_from_iteration(iter_item, metric)
+                    current_score = _extract_metric_from_iteration(iter_item, "total_score")
+                    current_cost = _extract_metric_from_iteration(iter_item, "total_cost")
+                    current_hard = _extract_metric_from_iteration(iter_item, "hard_total")
+
+                    if current_metric is not None:
+                        best_so_far_metric = (
+                            current_metric if best_so_far_metric is None else min(best_so_far_metric, current_metric)
+                        )
+                    if current_score is not None:
+                        best_so_far_score = (
+                            current_score if best_so_far_score is None else min(best_so_far_score, current_score)
+                        )
+                    if current_cost is not None:
+                        best_so_far_cost = current_cost if best_so_far_cost is None else min(best_so_far_cost, current_cost)
+                    if current_hard is not None:
+                        best_so_far_hard = current_hard if best_so_far_hard is None else min(best_so_far_hard, current_hard)
+
+                    iter_eval_calls = _first_not_none(
+                        iter_item.get("eval_calls_total"),
+                        (iter_item.get("progress") or {}).get("eval_calls_total")
+                        if isinstance(iter_item.get("progress"), dict)
+                        else None,
+                    )
+                    iter_eval_calls = _as_int(iter_eval_calls, 0)
+                    if iter_eval_calls <= 0:
+                        iter_eval_calls = iter_no
+                    iter_eval_calls = max(iter_eval_calls, prev_eval_calls)
+                    prev_eval_calls = iter_eval_calls
+                    eval_calls_total = max(eval_calls_total, iter_eval_calls)
+
                     convergence_rows.append(
                         {
                             "job_key": job_key,
                             "method": method,
                             "n_iter": n_iter,
+                            "run_id": run_idx,
                             "run": run_idx,
                             "seed": seed,
-                            "iteration_no": iter_item.get("iteration_no"),
-                            "label": (iter_item.get("progress") or {}).get("label")
-                            if isinstance(iter_item.get("progress"), dict)
-                            else "",
+                            "outer_iter": _outer_iter_from_label(str(label or ""), iter_no),
+                            "iteration_no": iter_no if iter_no > 0 else iter_item.get("iteration_no"),
+                            "label": label,
+                            "eval_calls_total": iter_eval_calls,
                             "metric": metric,
-                            "metric_value": _extract_metric_from_iteration(iter_item, metric),
-                            "total_score": _extract_metric_from_iteration(iter_item, "total_score"),
-                            "total_cost": _extract_metric_from_iteration(iter_item, "total_cost"),
-                            "hard_total": _extract_metric_from_iteration(iter_item, "hard_total"),
+                            "metric_value": current_metric,
+                            "best_so_far_metric_value": best_so_far_metric,
+                            "current_total_score": current_score,
+                            "best_so_far_total_score": best_so_far_score,
+                            "current_total_cost": current_cost,
+                            "best_so_far_total_cost": best_so_far_cost,
+                            "current_hard_total": current_hard,
+                            "best_so_far_hard_total": best_so_far_hard,
+                            # Backward-compatible aliases for existing tooling.
+                            "total_score": current_score,
+                            "total_cost": current_cost,
+                            "hard_total": current_hard,
                             "feasible": iter_item.get("feasible"),
                         }
                     )
+        if eval_calls_total > 0 and elapsed_sec > 0:
+            eval_per_sec = round(eval_calls_total / elapsed_sec, 6)
 
         run_row = {
             "job_key": job_key,
             "method": method,
             "n_iter": n_iter,
+            "run_id": run_idx,
             "run": run_idx,
             "seed": seed,
             "metric": metric,
             "metric_value": metric_value,
             "feasible": feasible,
+            "feasible_best": feasible_best,
+            "best_total_score": best_total_score,
+            "best_total_cost": best_total_cost,
+            "best_hard_total": best_hard_total,
             "total_score": total_score,
             "total_cost": total_cost,
             "hard_total": hard_total,
             "iteration_count": iteration_count,
+            "eval_calls_total": eval_calls_total,
+            "eval_per_sec": eval_per_sec,
             "elapsed_sec": elapsed_sec,
             "status": status,
             "error": error_msg,
@@ -1381,12 +1986,18 @@ def run_api_benchmark(settings: Dict[str, Any]) -> Dict[str, Any]:
     )
 
     convergence_rows_all = _read_convergence_rows_filtered(conv_csv, plan_keys)
+    fairness_files = _refresh_fairness_tables(
+        run_rows=run_rows,
+        convergence_rows=convergence_rows_all,
+        csv_dir=csv_dir,
+    )
     plot_files: Dict[str, str] = {}
     if generate_plots:
         summary_rows = _load_csv_rows(summary_csv)
         plot_files = _generate_plots(
             summary_rows=summary_rows,
             convergence_rows=convergence_rows_all,
+            run_rows=run_rows,
             metric=metric,
             plots_dir=plots_dir,
             dpi=plot_dpi,
@@ -1426,6 +2037,7 @@ def run_api_benchmark(settings: Dict[str, Any]) -> Dict[str, Any]:
             "checkpoint_json": str(checkpoint_path),
             "events_ndjson": str(event_log_path),
             **table_files,
+            **fairness_files,
             **plot_files,
         },
     }

@@ -35,6 +35,11 @@ class AlgorithmContext:
         self.scenario = scenario
         self.payload = payload
         self.frame_state = frame_state
-        self.evaluate = evaluate
+        self._evaluate = evaluate
+        self.eval_calls_total = 0
         self.record = record
         self.build_greedy_plan = build_greedy_plan
+
+    def evaluate(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        self.eval_calls_total += 1
+        return self._evaluate(state)

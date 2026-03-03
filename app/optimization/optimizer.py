@@ -139,6 +139,7 @@ def optimize_frame(
                 "total_cost": float(eval_res.get("total_cost", 0.0)),
                 "total_score": float(eval_res.get("total_score", eval_res.get("total_cost", 0.0))),
                 "hard_total": float(hard_total(eval_res)),
+                "eval_calls_total": int(ctx.eval_calls_total),
                 "evaluation": eval_res,
                 "state": state_dict,
                 "progress": {
@@ -164,10 +165,17 @@ def optimize_frame(
 
     best_state, best_eval = algo.run(ctx)
     _ensure_setup_times(best_state, problem)
+    best_hard_total = float(hard_total(best_eval))
+    feasible_best = bool(best_eval.get("feasible", best_hard_total == 0.0))
+    if best_hard_total == 0.0:
+        feasible_best = True
 
     return {
         "best_index": 0,
         "best_state": best_state,
         "best_evaluation": best_eval,
+        "best_hard_total": best_hard_total,
+        "feasible_best": feasible_best,
+        "eval_calls_total": int(ctx.eval_calls_total),
         "iterations": iterations,
     }
