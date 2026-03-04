@@ -33,6 +33,8 @@ def _tabu_search(
     base_label: str = "greedy",
     max_iter_override: int | None = None,
     label_prefix: str = "tabu",
+    record_step_labels: bool = True,
+    summary_label: str | None = None,
 ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     if record_base:
         ctx.record(start_state, start_eval, base_label)
@@ -62,9 +64,13 @@ def _tabu_search(
             problem=ctx.problem,
         )
         m_eval = ctx.evaluate(mutated)
-        ctx.record(mutated, m_eval, f"{label_prefix}-{step_idx}")
+        if record_step_labels:
+            ctx.record(mutated, m_eval, f"{label_prefix}-{step_idx}")
         if is_better(m_eval, cur_best_eval):
             cur_best_state, cur_best_eval = mutated, m_eval
+
+    if (not record_step_labels) and summary_label:
+        ctx.record(cur_best_state, cur_best_eval, summary_label)
 
     return cur_best_state, cur_best_eval
 

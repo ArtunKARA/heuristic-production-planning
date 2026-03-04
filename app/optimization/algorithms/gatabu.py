@@ -30,6 +30,10 @@ ALGO = Algorithm(
         desc="Önce GA çalıştırılır, ardından en iyi sonuç üzerinde tabu uygulanır.",
         params={
             "max_iter": {"type": "int", "default": 50, "min": 1, "max": 200},
+            "population_size": {"type": "int", "default": 20, "min": 2, "max": 100},
+            "crossover_rate": {"type": "float", "default": 0.8, "min": 0.0, "max": 1.0},
+            "selection_tournament_k": {"type": "int", "default": 3, "min": 2, "max": 10},
+            "early_stop_patience": {"type": "int", "default": 0, "min": 0, "max": 200},
             "time_shift_hours": {"type": "float", "default": 0.0, "min": -24, "max": 24},
             "bucket_shift": {"type": "int", "default": 1, "min": -5, "max": 5},
             "bucket_shift_rate": {"type": "float", "default": 0.5, "min": 0.0, "max": 1.0},

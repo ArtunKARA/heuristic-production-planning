@@ -104,8 +104,11 @@ const PARAM_DESC = {
   mold_swap_rate: "Kalıp swap uygulanma oranı (0-1).",
   mutation_seed: "Mutasyon için seed (0 = rastgele).",
   population_size: "GA popülasyon boyutu.",
+  crossover_rate: "Crossover uygulanma olasılığı (0-1).",
+  selection_tournament_k: "Tournament selection için örneklem büyüklüğü.",
+  early_stop_patience: "İyileşme yoksa erken durdurma jenerasyon eşiği (0 = kapalı).",
   tabu_iter: "Kısa tabu iterasyon sayısı.",
-  tabu_rate: "Tabu uygulama oranı (0-1).",
+  tabu_rate: "Tabu oranı (0-1). Not: GA+Tabu Inline için deprecated/etkisizdir.",
   top_k: "GA sonrası tabu uygulanacak aday sayısı.",
 };
 

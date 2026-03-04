@@ -117,6 +117,8 @@ def test_outer_iter_from_label():
     assert mod._outer_iter_from_label("greedy", 1) == 0
     assert mod._outer_iter_from_label("state", 1) == 0
     assert mod._outer_iter_from_label("ga-7", 3) == 7
+    assert mod._outer_iter_from_label("tabu-inline-5", 20) == 5
+    assert mod._outer_iter_from_label("tabu-topk-7", 20) == 7
     assert mod._outer_iter_from_label("tabu-inline-5-2", 20) == 5
     assert mod._outer_iter_from_label("unknown", 9) == 9
 

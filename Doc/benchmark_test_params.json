@@ -37,6 +37,9 @@
       },
       "ga_and_hybrids": {
         "population_size": 20,
+        "crossover_rate": 0.8,
+        "selection_tournament_k": 3,
+        "early_stop_patience": 0,
         "tabu_iter": 30,
         "tabu_rate": 0.5,
         "top_k": 5

@@ -801,8 +801,11 @@
       mold_swap_rate: "Kalıp swap oranı (0-1).",
       mutation_seed: "Mutasyon seed (0 = rastgele).",
       population_size: "GA popülasyon boyutu.",
+      crossover_rate: "Crossover uygulanma olasılığı (0-1).",
+      selection_tournament_k: "Tournament selection için örneklem büyüklüğü.",
+      early_stop_patience: "İyileşme yoksa erken durdurma jenerasyon eşiği (0 = kapalı).",
       tabu_iter: "Kısa tabu iterasyon sayısı.",
-      tabu_rate: "Tabu uygulama oranı (0-1).",
+      tabu_rate: "Tabu oranı (0-1). Not: GA+Tabu Inline için deprecated/etkisizdir.",
       top_k: "GA sonrası tabu uygulanacak aday sayısı.",
     };
 
@@ -830,9 +833,30 @@
         population_size: {
           type: "int",
           default: 20,
-          min: 1,
-          max: 50,
+          min: 2,
+          max: 100,
           desc: PARAM_DESC.population_size,
+        },
+        crossover_rate: {
+          type: "float",
+          default: 0.8,
+          min: 0.0,
+          max: 1.0,
+          desc: PARAM_DESC.crossover_rate,
+        },
+        selection_tournament_k: {
+          type: "int",
+          default: 3,
+          min: 2,
+          max: 10,
+          desc: PARAM_DESC.selection_tournament_k,
+        },
+        early_stop_patience: {
+          type: "int",
+          default: 0,
+          min: 0,
+          max: 200,
+          desc: PARAM_DESC.early_stop_patience,
         },
         tabu_iter: {
           type: "int",
