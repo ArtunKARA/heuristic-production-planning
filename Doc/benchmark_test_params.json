@@ -7,14 +7,14 @@
   },
   "api": {
     "base_url": "http://127.0.0.1:8000",
-    "timeout_seconds": 600
+    "timeout_seconds": 0
   },
   "input_output": {
     "input_file": "Doc/SampleData/example_input.json",
-    "output_dir": "Doc/api_benchmark_outputs"
+    "output_dir": "Doc/benchmark_outputs"
   },
   "benchmark_plan": {
-    "run_name": "paper_comparison_main",
+    "run_name": "paper_comparison_main_3",
     "resume": true,
     "iteration_list": [10, 20, 30, 50, 100, 200],
     "runs_per_iteration": 30,
@@ -25,9 +25,9 @@
     "table_metrics": ["best", "mean", "worst", "std_dev"]
   },
   "algorithm_selection": {
-    "include_methods": [],
-    "exclude_methods": ["greedy"],
-    "notes": "include_methods bos ise sistemde mevcut tum algoritmalar kullanilir; exclude_methods her zaman filtre olarak uygulanir."
+    "include_methods": ["ga", "tabu", "gatabu", "ga_tabu_inline", "ga_tabu_topk"],
+    "exclude_methods": ["greedy", "hho", "hmpa", "cssrank"],
+    "notes": "Bu kosu yalnizca GA / Tabu / GA-Tabu varyantlarini hedefler (NP=20). hho/hmpa/cssrank sonuclari zaten paper_comparison_main_2 altinda mevcut; build_tables_xlsx.py birlestirir."
   },
   "parameters": {
     "ui_global_parameters": {

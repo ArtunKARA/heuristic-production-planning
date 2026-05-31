@@ -371,12 +371,40 @@ def _build_url(base_url: str, path: str) -> str:
     return f"{base_url.rstrip('/')}{path}"
 
 
+def _normalize_timeout_sec(value: Any, default: float = 600.0) -> float | None:
+    """Return None for unlimited wait (config value <= 0)."""
+    if value is None:
+        return default
+    try:
+        sec = float(value)
+    except (TypeError, ValueError):
+        return default
+    if sec <= 0:
+        return None
+    return sec
+
+
+def _timeout_for_optimize(n_iter: int, base_timeout: float | None) -> float | None:
+    """Per-job timeout: unlimited if base is None, else scale with n_iter."""
+    if base_timeout is None:
+        return None
+    # Successful n_iter=200 runs are often 300-500s; allow headroom.
+    floor = 120.0 + 20.0 * float(max(n_iter, 1))
+    return max(base_timeout, floor)
+
+
+def _timeout_for_api_ops(base_timeout: float | None, fallback: float = 300.0) -> float | None:
+    if base_timeout is None:
+        return None
+    return min(base_timeout, fallback)
+
+
 def _request_json(
     method: str,
     base_url: str,
     path: str,
     payload: Dict[str, Any] | None,
-    timeout_sec: float,
+    timeout_sec: float | None,
 ) -> Dict[str, Any]:
     data = None if payload is None else json.dumps(payload).encode("utf-8")
     headers = {"Content-Type": "application/json"} if payload is not None else {}
@@ -399,11 +427,13 @@ def _request_json(
     return data_out
 
 
-def _post_json(base_url: str, path: str, payload: Dict[str, Any], timeout_sec: float) -> Dict[str, Any]:
+def _post_json(
+    base_url: str, path: str, payload: Dict[str, Any], timeout_sec: float | None
+) -> Dict[str, Any]:
     return _request_json("POST", base_url, path, payload, timeout_sec)
 
 
-def _get_json(base_url: str, path: str, timeout_sec: float) -> Dict[str, Any]:
+def _get_json(base_url: str, path: str, timeout_sec: float | None) -> Dict[str, Any]:
     return _request_json("GET", base_url, path, None, timeout_sec)
 
 
@@ -433,7 +463,9 @@ def _extract_best_metrics(result: Dict[str, Any], metric: str) -> Tuple[float | 
     return metric_val, best_eval
 
 
-def _discover_algorithms(base_url: str, frame_payload: Dict[str, Any], timeout_sec: float) -> List[str]:
+def _discover_algorithms(
+    base_url: str, frame_payload: Dict[str, Any], timeout_sec: float | None
+) -> List[str]:
     try:
         body = _post_json(
             base_url,
@@ -498,11 +530,36 @@ def _filter_rows_by_plan(rows: List[Dict[str, Any]], plan_keys: set[str]) -> Lis
     return [r for r in rows if _job_key_from_row(r) in plan_keys]
 
 
+def _row_sort_stamp(row: Dict[str, Any]) -> str:
+    return str(row.get("finished_at") or row.get("started_at") or "")
+
+
+def _dedupe_run_rows_by_job_key(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Keep one row per job_key; prefer ok over error, then latest timestamp."""
+    best: Dict[str, Dict[str, Any]] = {}
+    order: List[str] = []
+
+    def rank(row: Dict[str, Any]) -> tuple[int, str]:
+        status = str(row.get("status", "")).lower()
+        ok_rank = 2 if status == "ok" else 1 if status == "error" else 0
+        return (ok_rank, _row_sort_stamp(row))
+
+    for row in rows:
+        key = _job_key_from_row(row)
+        if key not in best:
+            order.append(key)
+            best[key] = row
+            continue
+        if rank(row) >= rank(best[key]):
+            best[key] = row
+    return [best[k] for k in order]
+
+
 def _completed_job_keys(rows: List[Dict[str, Any]]) -> set[str]:
+    """Only successful runs count as done; error rows are retried on resume."""
     out: set[str] = set()
     for row in rows:
-        status = str(row.get("status", "")).lower()
-        if status in {"ok", "error"}:
+        if str(row.get("status", "")).lower() == "ok":
             out.add(_job_key_from_row(row))
     return out
 
@@ -1508,12 +1565,13 @@ def _merge_runtime_settings(args: argparse.Namespace, ui_cfg: Dict[str, Any]) ->
         "ui_params": ui_params,
         "common_params": common_params,
         "method_params": method_params,
-        "timeout_sec": float(
+        "timeout_sec": _normalize_timeout_sec(
             _first_not_none(
                 api_cfg.get("timeout_seconds"),
                 ui_cfg.get("timeout"),
                 args.timeout,
-            )
+            ),
+            default=float(args.timeout),
         ),
         "seed_offset": int(
             _first_not_none(
@@ -1575,7 +1633,7 @@ def _merge_runtime_settings(args: argparse.Namespace, ui_cfg: Dict[str, Any]) ->
 def _ensure_frame_id(
     *,
     api_base_url: str,
-    timeout_sec: float,
+    timeout_sec: float | None,
     frame_payload: Dict[str, Any],
     existing_frame_id: str,
 ) -> str:
@@ -1603,7 +1661,8 @@ def run_api_benchmark(settings: Dict[str, Any]) -> Dict[str, Any]:
     ui_params: Dict[str, Any] = settings["ui_params"]
     common_params: Dict[str, Any] = settings["common_params"]
     method_params: Dict[str, Dict[str, Any]] = settings["method_params"]
-    timeout_sec: float = settings["timeout_sec"]
+    timeout_sec: float | None = settings["timeout_sec"]
+    api_timeout_sec = _timeout_for_api_ops(timeout_sec)
     seed_offset: int = settings["seed_offset"]
     generate_plots: bool = settings["generate_plots"]
     plot_dpi: int = max(72, int(settings["plot_dpi"]))
@@ -1637,7 +1696,7 @@ def run_api_benchmark(settings: Dict[str, Any]) -> Dict[str, Any]:
     _ensure_csv_header(run_csv, RUN_RESULTS_FIELDS)
     _ensure_csv_header(conv_csv, CONVERGENCE_FIELDS)
 
-    available_methods = _discover_algorithms(api_base_url, frame_payload, timeout_sec)
+    available_methods = _discover_algorithms(api_base_url, frame_payload, api_timeout_sec)
     methods = _select_methods(available_methods, include_methods, exclude_methods)
     if not methods:
         raise RuntimeError(
@@ -1649,7 +1708,7 @@ def run_api_benchmark(settings: Dict[str, Any]) -> Dict[str, Any]:
 
     # Load existing rows for resume.
     run_rows_all = _load_csv_rows(run_csv)
-    run_rows = _filter_rows_by_plan(run_rows_all, plan_keys)
+    run_rows = _dedupe_run_rows_by_job_key(_filter_rows_by_plan(run_rows_all, plan_keys))
     completed_keys = _completed_job_keys(run_rows)
     last_completed_job = _infer_last_completed_job(run_rows)
 
@@ -1682,7 +1741,7 @@ def run_api_benchmark(settings: Dict[str, Any]) -> Dict[str, Any]:
             frame_id = ""
     frame_id = _ensure_frame_id(
         api_base_url=api_base_url,
-        timeout_sec=timeout_sec,
+        timeout_sec=api_timeout_sec,
         frame_payload=frame_payload,
         existing_frame_id=frame_id,
     )
@@ -1760,21 +1819,26 @@ def run_api_benchmark(settings: Dict[str, Any]) -> Dict[str, Any]:
         status = "ok"
         error_msg = ""
         response: Dict[str, Any] = {}
+        job_timeout = _timeout_for_optimize(n_iter, timeout_sec)
         try:
-            response = _post_json(api_base_url, f"/frame/{frame_id}/optimize", optimize_payload, timeout_sec)
+            response = _post_json(
+                api_base_url, f"/frame/{frame_id}/optimize", optimize_payload, job_timeout
+            )
         except Exception as exc:
             msg = str(exc)
             if "HTTP 404" in msg and "Frame not found" in msg:
                 frame_id = _ensure_frame_id(
                     api_base_url=api_base_url,
-                    timeout_sec=timeout_sec,
+                    timeout_sec=api_timeout_sec,
                     frame_payload=frame_payload,
                     existing_frame_id="",
                 )
                 checkpoint["frame_id"] = frame_id
                 _atomic_write_json(checkpoint_path, checkpoint)
                 try:
-                    response = _post_json(api_base_url, f"/frame/{frame_id}/optimize", optimize_payload, timeout_sec)
+                    response = _post_json(
+                        api_base_url, f"/frame/{frame_id}/optimize", optimize_payload, job_timeout
+                    )
                 except Exception as exc2:
                     status = "error"
                     error_msg = str(exc2)

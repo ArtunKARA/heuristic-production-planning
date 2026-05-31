@@ -28,6 +28,18 @@ Thumbs.db
 # Local data outputs (generated)
 data/*.json
 
+# Benchmark loose outputs (use paper_benchmark_results.zip)
+Doc/benchmark_outputs/**/runs/
+Doc/benchmark_outputs/**/state/
+Doc/benchmark_outputs/*.log
+Doc/benchmark_outputs/api_server.*
+Doc/benchmark_outputs/paper_comparison_main_*/
+Doc/benchmark_outputs/benchmark_*/
+Doc/benchmark_outputs/_orchestration_logs/
+Doc/benchmark_outputs/tables_report.xlsx
+Doc/benchmark_outputs/**/*.zip
+!Doc/benchmark_outputs/paper_benchmark_results.zip
+
 # Keep test fixtures
 !tests/data/
 !tests/data/*.json
