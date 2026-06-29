@@ -1,0 +1,53 @@
+{
+  "input": "Doc/SampleData/example_input.json",
+  "weight_profiles": [
+    "default",
+    "normalized"
+  ],
+  "runs_per_cell": 10,
+  "max_iter": 50,
+  "seed_offset": 0,
+  "scenarios": [
+    "full",
+    "no_night",
+    "no_inventory",
+    "no_mold_change",
+    "no_tabu"
+  ],
+  "normalize_target": 1000.0,
+  "normalized_weight_info": {
+    "w_mold_change": {
+      "ref": 5.9,
+      "weight": 169.4915254237288,
+      "normalized": true
+    },
+    "w_night_mold_change": {
+      "ref": 0.0,
+      "weight": 100.0,
+      "normalized": false
+    },
+    "w_inventory": {
+      "ref": 3110712.1,
+      "weight": 0.0003214698010786662,
+      "normalized": true
+    },
+    "w_machine_count": {
+      "ref": 16.7,
+      "weight": 59.880239520958085,
+      "normalized": true
+    }
+  },
+  "files": {
+    "runs_csv": "Doc\\ablation_outputs\\csv\\ablation_runs.csv",
+    "summary_csv": "Doc\\ablation_outputs\\csv\\ablation_summary.csv",
+    "table_md": "Doc\\ablation_outputs\\ablation_table.md",
+    "default_total_score_mean": "Doc\\ablation_outputs\\plots\\ablation_default_total_score_mean.png",
+    "default_kpi_night_mold_change_mean": "Doc\\ablation_outputs\\plots\\ablation_default_kpi_night_mold_change_mean.png",
+    "default_kpi_mold_change_mean": "Doc\\ablation_outputs\\plots\\ablation_default_kpi_mold_change_mean.png",
+    "default_kpi_inventory_mean": "Doc\\ablation_outputs\\plots\\ablation_default_kpi_inventory_mean.png",
+    "normalized_total_score_mean": "Doc\\ablation_outputs\\plots\\ablation_normalized_total_score_mean.png",
+    "normalized_kpi_night_mold_change_mean": "Doc\\ablation_outputs\\plots\\ablation_normalized_kpi_night_mold_change_mean.png",
+    "normalized_kpi_mold_change_mean": "Doc\\ablation_outputs\\plots\\ablation_normalized_kpi_mold_change_mean.png",
+    "normalized_kpi_inventory_mean": "Doc\\ablation_outputs\\plots\\ablation_normalized_kpi_inventory_mean.png"
+  }
+}
